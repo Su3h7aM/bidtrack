@@ -10,3 +10,9 @@ dependencies = [
     "sqlmodel>=0.0.24",
     "streamlit>=1.45.1",
 ]
+
+[dependency-groups]
+dev = [
+    "pandas-stubs>=2.2.3.250527",
+    "plotly-stubs>=0.0.5",
+]
