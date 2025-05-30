@@ -4,6 +4,19 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, date, time
 
+from db.models import Bidding, Item, Supplier, Competitor, Quote, Bid, BiddingMode # Added BiddingMode as it's used by Bidding
+from repository import SQLModelRepository
+
+# --- Database Repository Instances ---
+db_url = "sqlite:///data/bidtrack.db" # Define the database URL
+
+bidding_repo = SQLModelRepository(Bidding, db_url)
+item_repo = SQLModelRepository(Item, db_url)
+supplier_repo = SQLModelRepository(Supplier, db_url)
+competitor_repo = SQLModelRepository(Competitor, db_url)
+quote_repo = SQLModelRepository(Quote, db_url)
+bid_repo = SQLModelRepository(Bid, db_url)
+
 # --- Constantes ---
 DEFAULT_BIDDING_SELECT_MESSAGE = "Selecione ou Cadastre uma Licitação..."
 DEFAULT_ITEM_SELECT_MESSAGE = "Selecione ou Cadastre um Item..."
@@ -19,62 +32,6 @@ if 'selected_item_id' not in st.session_state: st.session_state.selected_item_id
 if 'selected_bidding_name_for_display' not in st.session_state: st.session_state.selected_bidding_name_for_display = None
 if 'selected_item_name_for_display' not in st.session_state: st.session_state.selected_item_name_for_display = None
 
-
-# Bases de Dados em Memória
-if 'db_biddings' not in st.session_state:
-    mock_initial_biddings = [
-        {'id': 1, 'process_number': '18/2025', 'city': 'Rubiataba', 'mode': 'Pregão Eletrônico', 'session_date': pd.to_datetime('2025-06-26').date(), 'session_time': pd.to_datetime('08:00:00', format='%H:%M:%S').time(), 'created_at': datetime.now(), 'updated_at': datetime.now()},
-        {'id': 2, 'process_number': '23/2025', 'city': 'Ceres', 'mode': 'Tomada de Preços', 'session_date': pd.to_datetime('2025-05-22').date(), 'session_time': pd.to_datetime('09:30:00', format='%H:%M:%S').time(), 'created_at': datetime.now(), 'updated_at': datetime.now()},
-    ]
-    st.session_state.db_biddings = pd.DataFrame(mock_initial_biddings)
-    st.session_state.db_biddings['session_date'] = pd.to_datetime(st.session_state.db_biddings['session_date'], errors='coerce').dt.date
-    st.session_state.db_biddings['session_time'] = st.session_state.db_biddings['session_time'].apply(lambda x: pd.to_datetime(x, format='%H:%M:%S').time() if pd.notnull(x) and isinstance(x, str) else (x if isinstance(x, time) else None))
-
-if 'db_items' not in st.session_state:
-    mock_initial_items = [
-        {'id': 101, 'bidding_id': 1, 'name': 'Drone DJI Mavic Pro', 'description': 'Drone profissional com câmera 4K.', 'quantity': 2, 'unit': 'UN', 'created_at': datetime.now(), 'updated_at': datetime.now()},
-        {'id': 102, 'bidding_id': 1, 'name': 'Monitor LED 27" Full HD', 'description': 'Monitor para computador.', 'quantity': 5, 'unit': 'UN', 'created_at': datetime.now(), 'updated_at': datetime.now()},
-        {'id': 201, 'bidding_id': 2, 'name': 'Cadeira de Escritório Ergonômica', 'description': 'Cadeira giratória.', 'quantity': 10, 'unit': 'UN', 'created_at': datetime.now(), 'updated_at': datetime.now()}
-    ]
-    st.session_state.db_items = pd.DataFrame(mock_initial_items)
-
-if 'db_suppliers' not in st.session_state:
-    mock_initial_suppliers = [
-        {'id': 1, 'name': 'Fornecedor TechStore', 'website': 'techstore.com', 'email': 'contato@techstore.com', 'phone': '62999990001', 'description': 'Especialista em eletrônicos.', 'created_at': datetime.now(), 'updated_at': datetime.now()},
-        {'id': 2, 'name': 'Móveis Conforto Total', 'website': 'moveisconforto.com.br', 'email': 'vendas@moveisconforto.com.br', 'phone': '62999990002', 'description': 'Móveis para escritório.', 'created_at': datetime.now(), 'updated_at': datetime.now()},
-    ]
-    st.session_state.db_suppliers = pd.DataFrame(mock_initial_suppliers)
-
-if 'db_competitors' not in st.session_state:
-    mock_initial_competitors = [
-        {'id': 1, 'name': 'Concorrente Alfa Drones', 'website': 'alfadrones.com', 'email': 'comercial@alfadrones.com', 'phone': '11988880001', 'description': 'Forte em drones.', 'created_at': datetime.now(), 'updated_at': datetime.now()},
-        {'id': 2, 'name': 'Concorrente X Displays', 'website': 'xdisplays.com', 'email': 'contato@xdisplays.com', 'phone': '21988880002', 'description': 'Monitores e telas.', 'created_at': datetime.now(), 'updated_at': datetime.now()},
-    ]
-    st.session_state.db_competitors = pd.DataFrame(mock_initial_competitors)
-
-if 'db_quotes' not in st.session_state: 
-    mock_initial_quotes = [
-        {'id': 1, 'item_id': 101, 'supplier_id': 1, 'price': 7500.00, 'notes': 'Garantia 1 ano', 'created_at': datetime.now(), 'updated_at': datetime.now()},
-        {'id': 2, 'item_id': 102, 'supplier_id': 1, 'price': 800.00, 'notes': '', 'created_at': datetime.now(), 'updated_at': datetime.now()},
-    ]
-    st.session_state.db_quotes = pd.DataFrame(mock_initial_quotes)
-
-if 'db_bids' not in st.session_state: 
-    mock_initial_bids = [
-        {'id': 1, 'item_id': 101, 'competitor_id': 1, 'price': 7100.00, 'timestamp': pd.to_datetime('2025-05-28 10:00:00'), 'notes': 'Lance inicial', 'created_at': datetime.now(), 'updated_at': datetime.now()},
-    ]
-    st.session_state.db_bids = pd.DataFrame(mock_initial_bids)
-    st.session_state.db_bids['timestamp'] = pd.to_datetime(st.session_state.db_bids['timestamp'])
-
-
-# Próximos IDs
-if 'next_bidding_id' not in st.session_state: st.session_state.next_bidding_id = (st.session_state.db_biddings['id'].max() + 1) if not st.session_state.db_biddings.empty else 1
-if 'next_item_id' not in st.session_state: st.session_state.next_item_id = (st.session_state.db_items['id'].max() + 1) if not st.session_state.db_items.empty else 101
-if 'next_supplier_id' not in st.session_state: st.session_state.next_supplier_id = (st.session_state.db_suppliers['id'].max() + 1) if not st.session_state.db_suppliers.empty else 1
-if 'next_competitor_id' not in st.session_state: st.session_state.next_competitor_id = (st.session_state.db_competitors['id'].max() + 1) if not st.session_state.db_competitors.empty else 1
-if 'next_quote_id' not in st.session_state: st.session_state.next_quote_id = (st.session_state.db_quotes['id'].max() + 1) if not st.session_state.db_quotes.empty else 1
-if 'next_bid_id' not in st.session_state: st.session_state.next_bid_id = (st.session_state.db_bids['id'].max() + 1) if not st.session_state.db_bids.empty else 1
-
 # Estado para controlar abertura de diálogos e edição
 for dialog_type in ['bidding', 'item', 'supplier', 'competitor']:
     if f'show_manage_{dialog_type}_dialog' not in st.session_state: st.session_state[f'show_manage_{dialog_type}_dialog'] = False
@@ -87,45 +44,77 @@ if 'parent_bidding_id_for_item_dialog' not in st.session_state: st.session_state
 # --- Funções Auxiliares para Gráficos ---
 def create_quotes_figure(quotes_df_display: pd.DataFrame) -> go.Figure:
     fig = px.bar(quotes_df_display, x='supplier_name', y='price', title="Comparativo de Preços dos Orçamentos", labels={'supplier_name': 'Fornecedor', 'price': 'Preço (R$)'}, color='supplier_name', text_auto=True)
-    fig.update_layout(xaxis_title="Fornecedor", yaxis_title="Preço (R$)", legend_title_text='Fornecedores', dragmode='pan')
+    fig.update_layout(xaxis_title="Fornecedor", yaxis_title="Preço (R$)", legend_title_text='Fornecedores', dragmode='pan', showlegend=False) # Added showlegend=False
     return fig
 
 def create_bids_figure(bids_df_display: pd.DataFrame, min_quote_price: float = None) -> go.Figure:
-    if 'timestamp' in bids_df_display.columns and not bids_df_display['timestamp'].isnull().all():
-        b_df_sorted = bids_df_display.sort_values(by='timestamp') if len(bids_df_display) > 1 else bids_df_display
-        fig = px.line(b_df_sorted, x='timestamp', y='price', color='competitor_name', title="Evolução dos Lances ao Longo do Tempo", labels={'timestamp': 'Momento do Lance', 'price': 'Preço do Lance (R$)', 'competitor_name': 'Concorrente'}, markers=True)
+    if 'created_at' in bids_df_display.columns and not bids_df_display['created_at'].isnull().all():
+        b_df_sorted = bids_df_display.sort_values(by='created_at') if len(bids_df_display) > 1 else bids_df_display
+        fig = px.line(b_df_sorted, x='created_at', y='price', color='competitor_name', title="Evolução dos Lances ao Longo do Tempo", labels={'created_at': 'Momento do Lance', 'price': 'Preço do Lance (R$)', 'competitor_name': 'Concorrente'}, markers=True)
     else: 
         fig = px.bar(bids_df_display, x='competitor_name', y='price', title="Comparativo de Preços dos Lances (sem timestamp)", labels={'competitor_name': 'Concorrente', 'price': 'Preço do Lance (R$)'}, color='competitor_name', text_auto=True)
-    fig.update_layout(dragmode='pan', legend_title_text='Concorrentes') 
+    fig.update_layout(dragmode='pan', legend_title_text='Concorrentes', showlegend=False) # Added showlegend=False
     if min_quote_price is not None:
         fig.add_hline(y=min_quote_price, line_dash="dash", line_color="red", annotation_text=f"Menor Orçamento: R${min_quote_price:,.2f}", annotation_position="bottom right", annotation_font_size=10, annotation_font_color="red")
     return fig
 
 # --- Funções de Diálogo Genéricas (CRUD) ---
 def _manage_generic_dialog(
-    entity_type: str, db_key: str, next_id_key: str, 
+    entity_type: str, repo: SQLModelRepository,
     form_fields_config: dict, title_singular: str, 
-    related_entities_to_delete: list = None,
+    related_entities_to_delete: list = None, # This will need adjustment for DB cascade deletes later
     parent_id_field_name: str = None, 
     parent_id_value: any = None      
     ):
     data = {field: config.get('default', '') for field, config in form_fields_config.items() if isinstance(config, dict)}
     dialog_mode = "new"
     editing_id_key = f'editing_{entity_type}_id'
+    # db_key is no longer used directly for fetching, repo is used.
+    # next_id_key is no longer used.
     show_dialog_key = f'show_manage_{entity_type}_dialog'
     confirm_delete_key = f'confirm_delete_{entity_type}'
 
     if st.session_state[editing_id_key] is not None:
         try:
-            entity_to_edit_series = st.session_state[db_key][st.session_state[db_key]['id'] == st.session_state[editing_id_key]].iloc[0]
-            for field in form_fields_config.keys():
-                if field in entity_to_edit_series: data[field] = entity_to_edit_series[field]
-            data['id'] = entity_to_edit_series['id'] 
-            dialog_mode = "edit"
-        except IndexError:
-            st.error(f"{title_singular} não encontrado(a) para edição."); st.session_state[show_dialog_key] = False; st.session_state[editing_id_key] = None; st.rerun(); return
+            # Fetch entity from DB for editing
+            entity_to_edit = repo.get(st.session_state[editing_id_key]) # Changed get_by_id to get
+            if not entity_to_edit:
+                st.error(f"{title_singular} não encontrado(a) para edição (ID: {st.session_state[editing_id_key]})."); st.session_state[show_dialog_key] = False; st.session_state[editing_id_key] = None; st.rerun(); return
 
-    st.subheader(f"{'Editar' if dialog_mode == 'edit' else f'Novo(a)'} {title_singular}" + (f" (ID: {st.session_state[editing_id_key]})" if dialog_mode == 'edit' else ""))
+            # Populate form data from the fetched entity
+            if entity_to_edit: # Ensure entity_to_edit is not None
+                for field_key, config_val in form_fields_config.items(): # Use items() for better access
+                    if isinstance(config_val, dict): # Check if it's a field config
+                        model_attr = field_key
+                        if field_key == "description" and entity_type in ["item", "supplier", "competitor"]:
+                            model_attr = "desc"
+
+                        # Special handling for Bidding date/time form population
+                        if entity_type == "bidding" and field_key == "session_date":
+                            if hasattr(entity_to_edit, "date") and entity_to_edit.date:
+                                data[field_key] = entity_to_edit.date.date()
+                            else:
+                                data[field_key] = config_val.get('default') # Or None
+                            continue # Skip generic getattr for this field
+                        elif entity_type == "bidding" and field_key == "session_time":
+                            if hasattr(entity_to_edit, "date") and entity_to_edit.date:
+                                data[field_key] = entity_to_edit.date.time()
+                            else:
+                                data[field_key] = config_val.get('default') # Or None
+                            continue # Skip generic getattr for this field
+
+                        if hasattr(entity_to_edit, model_attr):
+                            data[field_key] = getattr(entity_to_edit, model_attr)
+                        elif 'default' in config_val: # Fallback to default if attr not present
+                             data[field_key] = config_val['default']
+                        else:
+                             data[field_key] = '' # Or some other suitable default
+                data['id'] = entity_to_edit.id
+            dialog_mode = "edit"
+        except Exception as e: # Catch potential errors during DB fetch or attribute access
+            st.error(f"Erro ao carregar {title_singular} para edição: {e}"); st.session_state[show_dialog_key] = False; st.session_state[editing_id_key] = None; st.rerun(); return
+
+    st.subheader(f"{'Editar' if dialog_mode == 'edit' else f'Novo(a)'} {title_singular}" + (f" (ID: {data.get('id')})" if dialog_mode == 'edit' else ""))
 
     with st.form(key=f"{entity_type}_form"):
         form_data_submitted = {}
@@ -168,21 +157,65 @@ def _manage_generic_dialog(
             if not is_valid: st.error("Por favor, preencha todos os campos obrigatórios (*).")
             else:
                 current_time = datetime.now()
-                save_data = {k: v for k, v in form_data_submitted.items() if k in form_fields_config} 
-                save_data['updated_at'] = current_time
+                save_data = {k: v for k, v in form_data_submitted.items() if k in form_fields_config}
+
+                if entity_type in ["item", "supplier", "competitor"] and "description" in save_data:
+                    save_data["desc"] = save_data.pop("description")
+
+                if entity_type == "bidding":
+                    session_date_val = save_data.pop("session_date", None)
+                    session_time_val = save_data.pop("session_time", None)
+
+                    if session_date_val: # session_date_val is a datetime.date object
+                        if session_time_val: # session_time_val is a datetime.time object
+                            save_data["date"] = datetime.combine(session_date_val, session_time_val)
+                        else:
+                            # If time is not provided, default to midnight (start of the day)
+                            save_data["date"] = datetime.combine(session_date_val, time.min)
+                    else:
+                        save_data["date"] = None # If date is not provided, date field in model is None
+
+                # Handle date/time conversions that might be strings from form
+                for field, config in form_fields_config.items():
+                    if config['type'] == 'date_input' and isinstance(save_data.get(field), str):
+                        save_data[field] = pd.to_datetime(save_data[field], errors='coerce').date() if save_data.get(field) else None
+                    elif config['type'] == 'time_input' and isinstance(save_data.get(field), str):
+                        try:
+                            save_data[field] = datetime.strptime(save_data[field], '%H:%M:%S').time() if save_data.get(field) else None
+                        except ValueError:
+                            save_data[field] = None # Or handle error appropriately
 
                 if dialog_mode == "new":
-                    save_data['id'] = st.session_state[next_id_key]
-                    save_data['created_at'] = current_time
-                    if parent_id_field_name and parent_id_value is not None: save_data[parent_id_field_name] = parent_id_value
-                    st.session_state[db_key] = pd.concat([st.session_state[db_key], pd.DataFrame([save_data])], ignore_index=True)
-                    st.session_state[next_id_key] += 1
-                    st.success(f"{title_singular} '{save_data.get('name', save_data.get('process_number', ''))}' criado(a) com sucesso!")
-                else: 
-                    idx = st.session_state[db_key][st.session_state[db_key]['id'] == st.session_state[editing_id_key]].index
-                    for key_update, value_update in save_data.items():
-                        st.session_state[db_key].loc[idx, key_update] = value_update
-                    st.success(f"{title_singular} '{save_data.get('name', save_data.get('process_number', ''))}' atualizado(a) com sucesso!")
+                    save_data['created_at'] = current_time # Model default might also handle this
+                    save_data['updated_at'] = current_time # Model default might also handle this
+                    if parent_id_field_name and parent_id_value is not None:
+                        save_data[parent_id_field_name] = parent_id_value
+
+                    # Remove 'id' if present, as DB will generate it
+                    if 'id' in save_data: del save_data['id']
+
+                    try:
+                        new_entity = repo.model(**save_data)
+                        created_entity = repo.add(new_entity)
+                        # Fetch the name or process_number for the success message
+                        display_name = created_entity.name if hasattr(created_entity, 'name') else getattr(created_entity, 'process_number', '')
+                        st.success(f"{title_singular} '{display_name}' (ID: {created_entity.id}) criado(a) com sucesso!")
+                    except Exception as e:
+                        st.error(f"Erro ao criar {title_singular}: {e}")
+                        st.session_state[show_dialog_key] = True # Keep dialog open on error
+                        st.rerun(); return
+
+                else: # dialog_mode == "edit"
+                    entity_id_to_update = st.session_state[editing_id_key]
+                    save_data['updated_at'] = current_time
+                    try:
+                        updated_entity = repo.update(entity_id_to_update, save_data)
+                        display_name = updated_entity.name if hasattr(updated_entity, 'name') else getattr(updated_entity, 'process_number', '')
+                        st.success(f"{title_singular} '{display_name}' (ID: {updated_entity.id}) atualizado(a) com sucesso!")
+                    except Exception as e:
+                        st.error(f"Erro ao atualizar {title_singular}: {e}")
+                        st.session_state[show_dialog_key] = True # Keep dialog open on error
+                        st.rerun(); return
                 
                 st.session_state[show_dialog_key] = False; st.session_state[editing_id_key] = None; st.rerun()
 
@@ -194,21 +227,57 @@ def _manage_generic_dialog(
         confirm_cols_del = st.columns(2)
         if confirm_cols_del[0].button(f"🔴 Confirmar Exclusão", type="primary", key=f"confirm_del_btn_{entity_type}", use_container_width=True):
             editing_id_val = st.session_state[editing_id_key]
-            if entity_type == 'bidding':
-                items_of_bidding_ids = st.session_state.db_items[st.session_state.db_items['bidding_id'] == editing_id_val]['id'].tolist()
-                if items_of_bidding_ids:
-                    st.session_state.db_quotes = st.session_state.db_quotes[~st.session_state.db_quotes['item_id'].isin(items_of_bidding_ids)]
-                    st.session_state.db_bids = st.session_state.db_bids[~st.session_state.db_bids['item_id'].isin(items_of_bidding_ids)]
-                st.session_state.db_items = st.session_state.db_items[st.session_state.db_items['bidding_id'] != editing_id_val]
-            elif entity_type == 'item':
-                st.session_state.db_quotes = st.session_state.db_quotes[st.session_state.db_quotes['item_id'] != editing_id_val]
-                st.session_state.db_bids = st.session_state.db_bids[st.session_state.db_bids['item_id'] != editing_id_val]
-            elif entity_type == 'supplier': st.session_state.db_quotes = st.session_state.db_quotes[st.session_state.db_quotes['supplier_id'] != editing_id_val]
-            elif entity_type == 'competitor': st.session_state.db_bids = st.session_state.db_bids[st.session_state.db_bids['competitor_id'] != editing_id_val]
+            try:
+                if entity_type == 'bidding':
+                    all_items = item_repo.get_all() or []
+                    items_to_delete = [item for item in all_items if item.bidding_id == editing_id_val]
+                    for item_del in items_to_delete:
+                        all_quotes = quote_repo.get_all() or []
+                        quotes_to_delete = [q for q in all_quotes if q.item_id == item_del.id]
+                        for quote_del in quotes_to_delete:
+                            quote_repo.delete(quote_del.id)
 
-            st.session_state[db_key] = st.session_state[db_key][st.session_state[db_key]['id'] != editing_id_val]
-            st.success(f"{title_singular} '{entity_name_display}' e suas dependências foram deletados(as).")
-            
+                        all_bids = bid_repo.get_all() or []
+                        bids_to_delete = [b for b in all_bids if b.item_id == item_del.id]
+                        for bid_del in bids_to_delete:
+                            bid_repo.delete(bid_del.id)
+                        item_repo.delete(item_del.id)
+
+                elif entity_type == 'item':
+                    item_id_to_delete = editing_id_val
+                    all_quotes = quote_repo.get_all() or []
+                    quotes_to_delete = [q for q in all_quotes if q.item_id == item_id_to_delete]
+                    for quote_del in quotes_to_delete:
+                        quote_repo.delete(quote_del.id)
+
+                    all_bids = bid_repo.get_all() or []
+                    bids_to_delete = [b for b in all_bids if b.item_id == item_id_to_delete]
+                    for bid_del in bids_to_delete:
+                        bid_repo.delete(bid_del.id)
+
+                elif entity_type == 'supplier':
+                    supplier_id_to_delete = editing_id_val
+                    all_quotes = quote_repo.get_all() or []
+                    quotes_to_delete = [q for q in all_quotes if q.supplier_id == supplier_id_to_delete]
+                    for quote_del in quotes_to_delete:
+                        quote_repo.delete(quote_del.id)
+
+                elif entity_type == 'competitor':
+                    competitor_id_to_delete = editing_id_val
+                    all_bids = bid_repo.get_all() or []
+                    bids_to_delete = [b for b in all_bids if b.competitor_id == competitor_id_to_delete]
+                    for bid_del in bids_to_delete:
+                        bid_repo.delete(bid_del.id)
+
+                # Finally, delete the main entity itself
+                repo.delete(editing_id_val)
+                st.success(f"{title_singular} '{entity_name_display}' e suas dependências foram deletados(as) com sucesso.")
+
+            except Exception as e:
+                st.error(f"Erro ao deletar {title_singular} e/ou suas dependências: {e}")
+                st.session_state[show_dialog_key] = True # Keep dialog open
+                st.rerun(); return
+
             if st.session_state.get(f'selected_{entity_type}_id') == editing_id_val: st.session_state[f'selected_{entity_type}_id'] = None
             if entity_type == 'bidding': st.session_state.selected_bidding_id = None; st.session_state.selected_item_id = None 
             if entity_type == 'item' and st.session_state.selected_item_id == editing_id_val: st.session_state.selected_item_id = None
@@ -231,7 +300,7 @@ bidding_form_config = {
 item_form_config = {
     'name': {'label': 'Nome do Item*', 'type': 'text_input', 'required': True},
     'description': {'label': 'Descrição', 'type': 'text_area', 'default': ''},
-    'quantity': {'label': 'Quantidade*', 'type': 'number_input', 'min_value': 1, 'default': 1, 'required': True, 'step': 1},
+    'quantity': {'label': 'Quantidade*', 'type': 'number_input', 'min_value': 1.0, 'default': 1.0, 'required': True, 'step': 1.0},
     'unit': {'label': 'Unidade*', 'type': 'text_input', 'default': 'UN', 'required': True}
 }
 contact_entity_form_config = {
@@ -245,56 +314,54 @@ contact_entity_form_config = {
 # --- Funções Wrapper para Diálogos Específicos ---
 @st.dialog("Gerenciar Licitação", width="large")
 def manage_bidding_dialog_wrapper():
-    _manage_generic_dialog('bidding', 'db_biddings', 'next_bidding_id', bidding_form_config, "Licitação", related_entities_to_delete=["itens", "orçamentos dos itens", "lances dos itens"])
+    _manage_generic_dialog('bidding', bidding_repo, bidding_form_config, "Licitação", related_entities_to_delete=["itens", "orçamentos dos itens", "lances dos itens"])
 
 @st.dialog("Gerenciar Item da Licitação", width="large")
 def manage_item_dialog_wrapper():
     parent_bidding_id = st.session_state.parent_bidding_id_for_item_dialog
     if parent_bidding_id is None: st.error("Licitação pai não definida."); st.session_state.show_manage_item_dialog = False; st.rerun(); return
-    try:
-        parent_bidding_info = st.session_state.db_biddings[st.session_state.db_biddings['id'] == parent_bidding_id].iloc[0]
-        st.info(f"Para Licitação: {parent_bidding_info['process_number']} - {parent_bidding_info['city']}")
-    except IndexError: st.error("Licitação pai não encontrada."); st.session_state.show_manage_item_dialog = False; st.rerun(); return
-    _manage_generic_dialog('item', 'db_items', 'next_item_id', item_form_config, "Item", related_entities_to_delete=["orçamentos", "lances"], parent_id_field_name='bidding_id', parent_id_value=parent_bidding_id)
+
+    parent_bidding = bidding_repo.get(parent_bidding_id) # Changed get_by_id to get
+    if not parent_bidding:
+        st.error("Licitação pai não encontrada."); st.session_state.show_manage_item_dialog = False; st.rerun(); return
+    st.info(f"Para Licitação: {parent_bidding.process_number} - {parent_bidding.city}")
+
+    _manage_generic_dialog('item', item_repo, item_form_config, "Item", related_entities_to_delete=["orçamentos", "lances"], parent_id_field_name='bidding_id', parent_id_value=parent_bidding_id)
 
 @st.dialog("Gerenciar Fornecedor", width="large")
 def manage_supplier_dialog_wrapper():
-    _manage_generic_dialog('supplier', 'db_suppliers', 'next_supplier_id', contact_entity_form_config, "Fornecedor", related_entities_to_delete=["orçamentos"])
+    _manage_generic_dialog('supplier', supplier_repo, contact_entity_form_config, "Fornecedor", related_entities_to_delete=["orçamentos"])
 
 @st.dialog("Gerenciar Concorrente", width="large")
 def manage_competitor_dialog_wrapper():
-    _manage_generic_dialog('competitor', 'db_competitors', 'next_competitor_id', contact_entity_form_config, "Concorrente", related_entities_to_delete=["lances"])
+    _manage_generic_dialog('competitor', competitor_repo, contact_entity_form_config, "Concorrente", related_entities_to_delete=["lances"])
 
 # --- Funções Auxiliares para Selectbox ---
-def get_options_map(db_key: str = None, df_input: pd.DataFrame = None, name_col: str = 'name', extra_cols: list = None, default_message:str = "Selecione...") -> tuple:
-    current_df = None
-    if df_input is not None: 
-        current_df = df_input.copy() # Use a copy to avoid modifying the original DataFrame
-    elif db_key is not None:
-        current_df = st.session_state.get(db_key, pd.DataFrame()).copy()
-    else: 
-        current_df = pd.DataFrame()
-
-    if current_df.empty: 
+def get_options_map(data_list: list, name_col: str = 'name', extra_cols: list = None, default_message:str = "Selecione...") -> tuple:
+    if not data_list:
         return {None: default_message}, [None]
-    
+
     options_map = {None: default_message}
     ids_list = [None]
 
-    if extra_cols: 
-        if all(col in current_df.columns for col in extra_cols):
-            current_df['display_name'] = current_df[extra_cols[0]].astype(str) + " - " + current_df[extra_cols[1]].astype(str) + " (" + current_df[extra_cols[2]].astype(str) + ")"
-            options_map.update({row['id']: row['display_name'] for _, row in current_df.iterrows()})
-            ids_list.extend(current_df['id'].tolist())
-        else: 
-            options_map.update({row['id']: str(row['id']) for _, row in current_df.iterrows()}) # Fallback
-            ids_list.extend(current_df['id'].tolist())
-    elif name_col in current_df.columns: 
-        options_map.update({row['id']: row[name_col] for _, row in current_df.iterrows()})
-        ids_list.extend(current_df['id'].tolist())
-    else: 
-        options_map.update({row['id']: str(row['id']) for _, row in current_df.iterrows()}) # Fallback
-        ids_list.extend(current_df['id'].tolist())
+    for row in data_list:
+        if extra_cols:
+            try:
+                # Ensure all extra_cols exist as attributes
+                display_name_parts = [str(getattr(row, col)) for col in extra_cols]
+                display_name = " - ".join(display_name_parts[:2]) # First two parts
+                if len(extra_cols) > 2:
+                    display_name += f" ({display_name_parts[2]})" # Third part in parentheses
+                options_map[row.id] = display_name
+            except AttributeError:
+                # Fallback if an attribute is missing
+                options_map[row.id] = str(row.id)
+        elif hasattr(row, name_col):
+            options_map[row.id] = getattr(row, name_col)
+        else:
+            # Fallback if name_col attribute is missing
+            options_map[row.id] = str(row.id)
+        ids_list.append(row.id)
         
     return options_map, ids_list
 
@@ -305,7 +372,9 @@ st.title(APP_TITLE)
 
 # --- Seleção de Licitação e Botão de Gerenciamento ---
 col_bid_select, col_bid_manage_btn = st.columns([5, 2], vertical_alignment="bottom") 
-bidding_options_map, bidding_option_ids = get_options_map(db_key='db_biddings', extra_cols=['process_number', 'city', 'mode'], default_message=DEFAULT_BIDDING_SELECT_MESSAGE)
+all_biddings = bidding_repo.get_all()
+if all_biddings is None: all_biddings = [] # Handle case where get_all might return None
+bidding_options_map, bidding_option_ids = get_options_map(data_list=all_biddings, extra_cols=['process_number', 'city', 'mode'], default_message=DEFAULT_BIDDING_SELECT_MESSAGE)
 
 with col_bid_select:
     selected_bidding_id_from_sb = st.selectbox("Escolha uma Licitação:", 
@@ -328,12 +397,14 @@ if selected_bidding_id_from_sb != st.session_state.selected_bidding_id:
 if st.session_state.show_manage_bidding_dialog: manage_bidding_dialog_wrapper()
 
 # --- Seleção de Item e Botão de Gerenciamento ---
-items_df_for_select = pd.DataFrame() 
+items_for_select = []
 if st.session_state.selected_bidding_id is not None:
     col_item_select, col_item_manage_btn = st.columns([5, 2], vertical_alignment="bottom")
     
-    items_df_for_select = st.session_state.db_items[st.session_state.db_items['bidding_id'] == st.session_state.selected_bidding_id]
-    item_options_map, item_option_ids = get_options_map(df_input=items_df_for_select, name_col='name', default_message=DEFAULT_ITEM_SELECT_MESSAGE) 
+    all_items = item_repo.get_all()
+    if all_items is None: all_items = []
+    items_for_select = [item for item in all_items if item.bidding_id == st.session_state.selected_bidding_id]
+    item_options_map, item_option_ids = get_options_map(data_list=items_for_select, name_col='name', default_message=DEFAULT_ITEM_SELECT_MESSAGE)
 
     with col_item_select:
         bidding_display_label = st.session_state.selected_bidding_name_for_display if st.session_state.selected_bidding_name_for_display else "Licitação Selecionada"
@@ -360,20 +431,23 @@ if st.session_state.show_manage_item_dialog:
 # --- Exibição de Informações do Item, Expanders, Tabelas e Gráficos ---
 if st.session_state.selected_item_id is not None:
     try:
-        if not items_df_for_select.empty: 
-            current_item_details_series = items_df_for_select[items_df_for_select['id'] == st.session_state.selected_item_id]
-            if not current_item_details_series.empty:
-                current_item_details = current_item_details_series.iloc[0]
-                st.markdown(f"**Item Selecionado:** {current_item_details['name']} (ID: {st.session_state.selected_item_id})")
-                st.markdown(f"**Descrição:** {current_item_details['description']}")
-                st.markdown(f"**Quantidade:** {current_item_details['quantity']} {current_item_details['unit']}")
+        if items_for_select: # Check if the list is not empty
+            current_item_details_list = [item for item in items_for_select if item.id == st.session_state.selected_item_id]
+            if current_item_details_list:
+                current_item_details = current_item_details_list[0]
+                st.markdown(f"**Item Selecionado:** {current_item_details.name} (ID: {st.session_state.selected_item_id})")
+                st.markdown(f"**Descrição:** {current_item_details.desc}")
+                st.markdown(f"**Quantidade:** {current_item_details.quantity} {current_item_details.unit}")
                 st.markdown("---")
 
                 expander_cols = st.columns(2)
                 with expander_cols[0]:
-                    with st.expander(f"➕ Adicionar Novo Orçamento para {current_item_details['name']}", expanded=False):
+                    with st.expander(f"➕ Adicionar Novo Orçamento para {current_item_details.name}", expanded=False):
                         col_supp_select, col_supp_manage = st.columns([3,2], vertical_alignment="bottom")
-                        supplier_options_map, supplier_option_ids = get_options_map(db_key='db_suppliers', default_message=DEFAULT_SUPPLIER_SELECT_MESSAGE)
+                        # TODO: Update this get_options_map call for suppliers
+                        all_suppliers = supplier_repo.get_all()
+                        if all_suppliers is None: all_suppliers = []
+                        supplier_options_map, supplier_option_ids = get_options_map(data_list=all_suppliers, default_message=DEFAULT_SUPPLIER_SELECT_MESSAGE)
                         with col_supp_select:
                             selected_supplier_id_quote = st.selectbox("Fornecedor*:", options=supplier_option_ids, format_func=lambda x: supplier_options_map.get(x, DEFAULT_SUPPLIER_SELECT_MESSAGE), key="sb_supplier_quote_exp")
                         with col_supp_manage:
@@ -382,18 +456,29 @@ if st.session_state.selected_item_id is not None:
                                 st.session_state.show_manage_supplier_dialog = True
                         with st.form(key="new_quote_form"):
                             quote_price = st.number_input("Preço do Orçamento*", min_value=0.01, format="%.2f", key="quote_price_input_exp")
+                            quote_margin = st.number_input("Margem*", min_value=0.0, format="%.2f", key="quote_margin_input_exp", help="Valor da margem em decimal. Ex: 0.2 para 20%")
                             quote_notes = st.text_area("Notas do Orçamento", key="quote_notes_input_exp")
                             if st.form_submit_button("💾 Salvar Orçamento"):
-                                if selected_supplier_id_quote and quote_price > 0:
-                                    current_time = datetime.now()
-                                    new_quote_data = {'id': st.session_state.next_quote_id, 'item_id': st.session_state.selected_item_id, 'supplier_id': selected_supplier_id_quote, 'price': quote_price, 'notes': quote_notes, 'created_at': current_time, 'updated_at': current_time}
-                                    st.session_state.db_quotes = pd.concat([st.session_state.db_quotes, pd.DataFrame([new_quote_data])], ignore_index=True); st.session_state.next_quote_id += 1
-                                    st.success("Orçamento adicionado!"); st.rerun()
-                                else: st.error("Selecione um fornecedor e insira um preço válido.")
+                                if selected_supplier_id_quote and quote_price > 0 and st.session_state.selected_item_id is not None:
+                                    try:
+                                        new_quote = Quote(
+                                            item_id=st.session_state.selected_item_id,
+                                            supplier_id=selected_supplier_id_quote,
+                                            price=quote_price,
+                                            margin=quote_margin, # Added margin
+                                            notes=quote_notes
+                                        )
+                                        quote_repo.add(new_quote)
+                                        st.success(f"Orçamento de {supplier_options_map.get(selected_supplier_id_quote, 'Fornecedor')} adicionado!"); st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Erro ao salvar orçamento: {e}")
+                                else: st.error("Selecione um item, um fornecedor e insira um preço válido.")
                 with expander_cols[1]:
-                    with st.expander(f"➕ Adicionar Novo Lance para {current_item_details['name']}", expanded=False):
+                    with st.expander(f"➕ Adicionar Novo Lance para {current_item_details.name}", expanded=False):
                         col_comp_select, col_comp_manage = st.columns([3,2], vertical_alignment="bottom")
-                        competitor_options_map, competitor_option_ids = get_options_map(db_key='db_competitors', default_message=DEFAULT_COMPETITOR_SELECT_MESSAGE)
+                        all_competitors = competitor_repo.get_all()
+                        if all_competitors is None: all_competitors = []
+                        competitor_options_map, competitor_option_ids = get_options_map(data_list=all_competitors, default_message=DEFAULT_COMPETITOR_SELECT_MESSAGE)
                         with col_comp_select:
                             selected_competitor_id_bid = st.selectbox("Concorrente*:", options=competitor_option_ids, format_func=lambda x: competitor_options_map.get(x, DEFAULT_COMPETITOR_SELECT_MESSAGE), key="sb_competitor_bid_exp")
                         with col_comp_manage:
@@ -404,29 +489,69 @@ if st.session_state.selected_item_id is not None:
                             bid_price = st.number_input("Preço do Lance*", min_value=0.01, format="%.2f", key="bid_price_input_exp")
                             bid_notes = st.text_area("Notas do Lance", key="bid_notes_input_exp")
                             if st.form_submit_button("💾 Salvar Lance"):
-                                if selected_competitor_id_bid and bid_price > 0:
-                                    current_time = datetime.now()
-                                    new_bid_data = {'id': st.session_state.next_bid_id, 'item_id': st.session_state.selected_item_id, 'competitor_id': selected_competitor_id_bid, 'price': bid_price, 'notes': bid_notes, 'timestamp': current_time, 'created_at': current_time, 'updated_at': current_time}
-                                    st.session_state.db_bids = pd.concat([st.session_state.db_bids, pd.DataFrame([new_bid_data])], ignore_index=True); st.session_state.next_bid_id += 1
-                                    st.success("Lance adicionado!"); st.rerun()
-                                else: st.error("Selecione um concorrente e insira um preço válido.")
+                                if selected_competitor_id_bid and bid_price > 0 and st.session_state.selected_item_id is not None and hasattr(current_item_details, 'bidding_id'):
+                                    try:
+                                        new_bid = Bid(
+                                            item_id=st.session_state.selected_item_id,
+                                            bidding_id=current_item_details.bidding_id, # Sourced from current_item_details
+                                            competitor_id=selected_competitor_id_bid,
+                                            price=bid_price,
+                                            notes=bid_notes
+                                        )
+                                        bid_repo.add(new_bid)
+                                        st.success(f"Lance de {competitor_options_map.get(selected_competitor_id_bid, 'Concorrente')} adicionado!"); st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Erro ao salvar lance: {e}")
+                                else: st.error("Selecione um item, um concorrente, certifique-se que o item tem `bidding_id` e insira um preço válido.")
 
-                quotes_for_item_df_display = st.session_state.db_quotes[st.session_state.db_quotes['item_id'] == st.session_state.selected_item_id].copy()
-                bids_for_item_df_display = st.session_state.db_bids[st.session_state.db_bids['item_id'] == st.session_state.selected_item_id].copy()
-                if not quotes_for_item_df_display.empty and not st.session_state.db_suppliers.empty: quotes_for_item_df_display = pd.merge(quotes_for_item_df_display, st.session_state.db_suppliers[['id', 'name']], left_on='supplier_id', right_on='id', how='left').rename(columns={'name': 'supplier_name'})
-                if not bids_for_item_df_display.empty and not st.session_state.db_competitors.empty: bids_for_item_df_display = pd.merge(bids_for_item_df_display, st.session_state.db_competitors[['id', 'name']], left_on='competitor_id', right_on='id', how='left').rename(columns={'name': 'competitor_name'})
+                all_quotes = quote_repo.get_all()
+                if all_quotes is None: all_quotes = []
+                quotes_for_item_list = [q for q in all_quotes if q.item_id == st.session_state.selected_item_id]
+
+                all_bids = bid_repo.get_all()
+                if all_bids is None: all_bids = []
+                bids_for_item_list = [b for b in all_bids if b.item_id == st.session_state.selected_item_id]
+
+                # TODO: The merging logic with supplier/competitor names needs to be re-thought.
+                # For now, let's prepare display data as list of dicts or adapt create_figure functions.
+                # This will be addressed in a subsequent step.
+                quotes_for_item_df_display = pd.DataFrame([q.model_dump() for q in quotes_for_item_list]) # Temporary
+                bids_for_item_df_display = pd.DataFrame([b.model_dump() for b in bids_for_item_list]) # Temporary
+
+                # TEMP: Add supplier/competitor names for display - this needs proper handling with relationships or dedicated DTOs
+                if not quotes_for_item_df_display.empty and all_suppliers:
+                    supplier_map = {s.id: s.name for s in all_suppliers}
+                    quotes_for_item_df_display['supplier_name'] = quotes_for_item_df_display['supplier_id'].map(supplier_map)
+
+                if not bids_for_item_df_display.empty and all_competitors:
+                    competitor_map = {c.id: c.name for c in all_competitors}
+                    bids_for_item_df_display['competitor_name'] = bids_for_item_df_display['competitor_id'].map(competitor_map)
+
 
                 table_cols_display = st.columns(2) 
                 with table_cols_display[0]:
                     st.markdown("##### Orçamentos Recebidos")
-                    if not quotes_for_item_df_display.empty: st.dataframe(quotes_for_item_df_display[['supplier_name', 'price', 'notes', 'updated_at']], hide_index=True, use_container_width=True)
+                    # Add formatting for date columns
+                    if not quotes_for_item_df_display.empty: # Check if DataFrame is not empty before formatting
+                        if 'created_at' in quotes_for_item_df_display.columns:
+                            quotes_for_item_df_display['created_at'] = pd.to_datetime(quotes_for_item_df_display['created_at']).dt.strftime('%Y-%m-%d %H:%M:%S')
+                        if 'update_at' in quotes_for_item_df_display.columns and pd.notnull(quotes_for_item_df_display['update_at']).all():
+                            quotes_for_item_df_display['update_at'] = pd.to_datetime(quotes_for_item_df_display['update_at']).dt.strftime('%Y-%m-%d %H:%M:%S')
+
+                    if not quotes_for_item_df_display.empty: st.dataframe(quotes_for_item_df_display[['supplier_name', 'price', 'created_at', 'update_at', 'notes']], hide_index=True, use_container_width=True)
                     else: st.info("Nenhum orçamento cadastrado para este item.")
                 with table_cols_display[1]:
                     st.markdown("##### Lances Recebidos")
                     if not bids_for_item_df_display.empty:
                         bids_to_show = bids_for_item_df_display.copy(); 
-                        if 'timestamp' in bids_to_show.columns: bids_to_show['timestamp'] = pd.to_datetime(bids_to_show['timestamp']).dt.strftime('%Y-%m-%d %H:%M:%S')
-                        st.dataframe(bids_to_show[['competitor_name', 'price', 'timestamp', 'notes', 'updated_at']], hide_index=True, use_container_width=True)
+                        if 'created_at' in bids_to_show.columns: # Check for created_at now
+                            bids_to_show['created_at'] = pd.to_datetime(bids_to_show['created_at']).dt.strftime('%Y-%m-%d %H:%M:%S')
+                        if 'update_at' in bids_to_show.columns and pd.notnull(bids_to_show['update_at']).all(): # ensure not all are NaT/None
+                            bids_to_show['update_at'] = pd.to_datetime(bids_to_show['update_at']).dt.strftime('%Y-%m-%d %H:%M:%S')
+                        # The model has 'updated_at'. If 'update_at' is truly intended for display,
+                        # it must be present in bids_to_show DataFrame.
+                        # Let's assume 'update_at' is a specific column name in the DataFrame for display purposes.
+                        st.dataframe(bids_to_show[['competitor_name', 'price', 'created_at', 'notes', 'update_at']], hide_index=True, use_container_width=True)
                     else: st.info("Nenhum lance cadastrado para este item.")
 
                 st.markdown("---"); st.subheader("Gráficos do Item")
