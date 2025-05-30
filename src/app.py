@@ -4,8 +4,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, date, time
 
-from src.db.models import Bidding, Item, Supplier, Competitor, Quote, Bid, BiddingMode # Added BiddingMode as it's used by Bidding
-from src.repository import SQLModelRepository
+from db.models import Bidding, Item, Supplier, Competitor, Quote, Bid, BiddingMode # Added BiddingMode as it's used by Bidding
+from repository import SQLModelRepository
 
 # --- Database Repository Instances ---
 db_url = "sqlite:///data/bidtrack.db" # Define the database URL
