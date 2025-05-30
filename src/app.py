@@ -273,7 +273,7 @@ bidding_form_config = {
 item_form_config = {
     'name': {'label': 'Nome do Item*', 'type': 'text_input', 'required': True},
     'description': {'label': 'Descrição', 'type': 'text_area', 'default': ''},
-    'quantity': {'label': 'Quantidade*', 'type': 'number_input', 'min_value': 1, 'default': 1, 'required': True, 'step': 1},
+    'quantity': {'label': 'Quantidade*', 'type': 'number_input', 'min_value': 1.0, 'default': 1.0, 'required': True, 'step': 1.0},
     'unit': {'label': 'Unidade*', 'type': 'text_input', 'default': 'UN', 'required': True}
 }
 contact_entity_form_config = {
