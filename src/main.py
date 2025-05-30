@@ -32,17 +32,12 @@ for dialog_type in ["bidding", "item", "supplier", "competitor"]:
 if "parent_bidding_id_for_item_dialog" not in st.session_state:
     st.session_state.parent_bidding_id_for_item_dialog = None
 
-# --- Funções de Interação com o Banco de Dados (TODO ELABORATE: Implementar com SQLModel) ---
+# --- Funções de Interação com o Banco de Dados (TODO: Implementar com SQLModel) ---
 
 
 def load_biddings_from_db() -> pd.DataFrame:
     """Carrega todas as licitações do banco de dados."""
-    # TODO: ELABORATE: Implementar a query para buscar licitações do banco de dados.
-    # Exemplo com SQLModel (conceitual):
-    # with Session(engine) as session:
-    #     statement = select(Bidding)
-    #     results = session.exec(statement).all()
-    #     return pd.DataFrame([b.model_dump() for b in results])
+    # TODO: Implementar a query para buscar licitações do banco de dados.
     return pd.DataFrame(
         columns=[
             "id",
@@ -57,17 +52,9 @@ def load_biddings_from_db() -> pd.DataFrame:
     )
 
 
-def load_items_from_db(bidding_id: int = None) -> pd.DataFrame:
+def load_items_from_db(bidding_id: int) -> pd.DataFrame:
     """Carrega itens do banco de dados, opcionalmente filtrados por bidding_id."""
     # TODO: Implementar a query para buscar itens.
-    # Se bidding_id for fornecido, filtre por ele.
-    # Exemplo:
-    # with Session(engine) as session:
-    #     statement = select(Item)
-    #     if bidding_id:
-    #         statement = statement.where(Item.bidding_id == bidding_id)
-    #     results = session.exec(statement).all()
-    #     return pd.DataFrame([i.model_dump() for i in results])
     df = pd.DataFrame(
         columns=[
             "id",
@@ -80,9 +67,7 @@ def load_items_from_db(bidding_id: int = None) -> pd.DataFrame:
             "updated_at",
         ]
     )
-    if bidding_id is not None:  # Simula o filtro para a UI não quebrar completamente
-        return df[df["bidding_id"] == bidding_id]
-    return df
+    return df[df["bidding_id"] == bidding_id]  # Simula filtro
 
 
 def load_suppliers_from_db() -> pd.DataFrame:
@@ -119,7 +104,7 @@ def load_competitors_from_db() -> pd.DataFrame:
     )
 
 
-def load_quotes_from_db(item_id: int = None) -> pd.DataFrame:
+def load_quotes_from_db(item_id: int) -> pd.DataFrame:
     """Carrega orçamentos do banco de dados, opcionalmente filtrados por item_id."""
     # TODO: Implementar a query para buscar orçamentos.
     # Lembre-se de fazer join com a tabela de fornecedores para obter o nome.
@@ -135,12 +120,10 @@ def load_quotes_from_db(item_id: int = None) -> pd.DataFrame:
             "supplier_name",
         ]
     )
-    if item_id is not None:
-        return df[df["item_id"] == item_id]
-    return df
+    return df[df["item_id"] == item_id]  # Simula filtro
 
 
-def load_bids_from_db(item_id: int = None) -> pd.DataFrame:
+def load_bids_from_db(item_id: int) -> pd.DataFrame:
     """Carrega lances do banco de dados, opcionalmente filtrados por item_id."""
     # TODO: Implementar a query para buscar lances.
     # Lembre-se de fazer join com a tabela de concorrentes para obter o nome.
@@ -157,43 +140,20 @@ def load_bids_from_db(item_id: int = None) -> pd.DataFrame:
             "competitor_name",
         ]
     )
-    if item_id is not None:
-        return df[df["item_id"] == item_id]
-    return df
+    return df[df["item_id"] == item_id]  # Simula filtro
 
 
 def db_create_entity(entity_type: str, data: dict) -> dict:
     """Cria uma nova entidade no banco de dados."""
     # TODO: Implementar a lógica de inserção no DB para entity_type.
-    # data já contém 'created_at' e 'updated_at'. O DB deve gerar o 'id'.
-    # Exemplo conceitual:
-    # with Session(engine) as session:
-    #     if entity_type == 'bidding': db_object = Bidding.model_validate(data)
-    #     elif entity_type == 'item': db_object = Item.model_validate(data)
-    #     # ... etc.
-    #     session.add(db_object)
-    #     session.commit()
-    #     session.refresh(db_object)
-    #     return db_object.model_dump()
     st.info(f"[DB MOCK] Criando {entity_type} com dados: {data}")
-    data["id"] = int(datetime.now().timestamp() * 1000)  # Mock ID
-    return data  # Retorna os dados com o ID mockado
+    data["id"] = int(datetime.now().timestamp() * 1000)
+    return data
 
 
 def db_update_entity(entity_type: str, entity_id: int, data: dict) -> dict:
     """Atualiza uma entidade existente no banco de dados."""
     # TODO: Implementar a lógica de atualização no DB.
-    # data já contém 'updated_at'.
-    # Exemplo:
-    # with Session(engine) as session:
-    #     db_object = session.get(Bidding if entity_type == 'bidding' else Item, entity_id) # Ajustar classe
-    #     if db_object:
-    #         for key, value in data.items():
-    #             setattr(db_object, key, value)
-    #         session.add(db_object)
-    #         session.commit()
-    #         session.refresh(db_object)
-    #         return db_object.model_dump()
     st.info(f"[DB MOCK] Atualizando {entity_type} ID {entity_id} com dados: {data}")
     data["id"] = entity_id
     return data
@@ -202,15 +162,11 @@ def db_update_entity(entity_type: str, entity_id: int, data: dict) -> dict:
 def db_delete_entity(entity_type: str, entity_id: int):
     """Deleta uma entidade do banco de dados."""
     # TODO: Implementar a lógica de deleção no DB.
-    # Considerar deleções em cascata se configuradas no modelo de dados
-    # ou implementá-las aqui se necessário (ex: deletar itens de uma licitação).
-    # A lógica de deleção em cascata para o session_state já está no _manage_generic_dialog.
-    # No DB, isso pode ser automático ou exigir queries explícitas.
     st.info(f"[DB MOCK] Deletando {entity_type} ID {entity_id}")
     pass
 
 
-# --- Funções Auxiliares para Gráficos (sem alteração) ---
+# --- Funções Auxiliares para Gráficos ---
 def create_quotes_figure(quotes_df_display: pd.DataFrame) -> go.Figure:
     fig = px.bar(
         quotes_df_display,
@@ -224,8 +180,9 @@ def create_quotes_figure(quotes_df_display: pd.DataFrame) -> go.Figure:
     fig.update_layout(
         xaxis_title="Fornecedor",
         yaxis_title="Preço (R$)",
-        legend_title_text="Fornecedores",
         dragmode="pan",
+        showlegend=False,  # Remove a legenda
+        margin=dict(l=20, r=20, t=50, b=50),  # Ajustar margem inferior se necessário
     )
     return fig
 
@@ -265,7 +222,12 @@ def create_bids_figure(
             color="competitor_name",
             text_auto=True,
         )
-    fig.update_layout(dragmode="pan", legend_title_text="Concorrentes")
+
+    fig.update_layout(
+        dragmode="pan",
+        showlegend=False,  # Remove a legenda
+        margin=dict(l=20, r=20, t=50, b=50),  # Ajustar margem inferior se necessário
+    )
     if min_quote_price is not None:
         fig.add_hline(
             y=min_quote_price,
@@ -298,14 +260,11 @@ def _manage_generic_dialog(
     show_dialog_key = f"show_manage_{entity_type}_dialog"
     confirm_delete_key = f"confirm_delete_{entity_type}"
 
-    # Carregar dados da entidade para edição (se aplicável)
-    db_entities_df = pd.DataFrame()  # DataFrame vazio por padrão
+    db_entities_df = pd.DataFrame()
     if entity_type == "bidding":
         db_entities_df = load_biddings_from_db()
     elif entity_type == "item":
-        db_entities_df = (
-            load_items_from_db()
-        )  # Pode precisar de filtro se carregando todos
+        db_entities_df = load_items_from_db()
     elif entity_type == "supplier":
         db_entities_df = load_suppliers_from_db()
     elif entity_type == "competitor":
@@ -313,7 +272,6 @@ def _manage_generic_dialog(
 
     if st.session_state[editing_id_key] is not None:
         try:
-            # Busca a entidade no DataFrame carregado do "DB"
             entity_to_edit_series = db_entities_df[
                 db_entities_df["id"] == st.session_state[editing_id_key]
             ].iloc[0]
@@ -437,13 +395,11 @@ def _manage_generic_dialog(
                     save_data["created_at"] = current_time
                     if parent_id_field_name and parent_id_value is not None:
                         save_data[parent_id_field_name] = parent_id_value
-                    # TODO: Chamar db_create_entity e obter o ID real do banco
                     created_entity = db_create_entity(entity_type, save_data)
                     st.success(
                         f"{title_singular} '{created_entity.get('name', created_entity.get('process_number', ''))}' criado(a) com sucesso!"
                     )
                 else:
-                    # TODO: Chamar db_update_entity
                     updated_entity = db_update_entity(
                         entity_type, st.session_state[editing_id_key], save_data
                     )
@@ -469,16 +425,10 @@ def _manage_generic_dialog(
             use_container_width=True,
         ):
             editing_id_val = st.session_state[editing_id_key]
-            # TODO: Chamar db_delete_entity(entity_type, editing_id_val)
-            # A lógica de deleção em cascata de dependências (itens, orçamentos, lances)
-            # deve ser tratada aqui ou no backend (idealmente no DB com constraints).
-            # Por agora, a UI vai assumir que a deleção foi bem-sucedida.
-            db_delete_entity(entity_type, editing_id_val)  # Chamada à função de deleção
-
+            db_delete_entity(entity_type, editing_id_val)
             st.success(
                 f"{title_singular} '{entity_name_display}' e suas dependências foram deletados(as)."
             )
-
             if st.session_state.get(f"selected_{entity_type}_id") == editing_id_val:
                 st.session_state[f"selected_{entity_type}_id"] = None
             if entity_type == "bidding":
@@ -489,7 +439,6 @@ def _manage_generic_dialog(
                 and st.session_state.selected_item_id == editing_id_val
             ):
                 st.session_state.selected_item_id = None
-
             st.session_state[show_dialog_key] = False
             st.session_state[editing_id_key] = None
             st.session_state[confirm_delete_key] = False
@@ -598,8 +547,7 @@ def manage_item_dialog_wrapper():
         st.session_state.show_manage_item_dialog = False
         st.rerun()
         return
-
-    biddings_df = load_biddings_from_db()  # Carrega licitações para obter info da pai
+    biddings_df = load_biddings_from_db()
     try:
         parent_bidding_info = biddings_df[biddings_df["id"] == parent_bidding_id].iloc[
             0
@@ -612,7 +560,6 @@ def manage_item_dialog_wrapper():
         st.session_state.show_manage_item_dialog = False
         st.rerun()
         return
-
     _manage_generic_dialog(
         "item",
         form_fields_config=item_form_config,
@@ -651,49 +598,34 @@ def get_options_map(
     default_message: str = "Selecione...",
 ) -> tuple:
     current_df = df_input.copy() if df_input is not None else pd.DataFrame()
-
     if current_df.empty:
         return {None: default_message}, [None]
-
     options_map = {None: default_message}
-    ids_list = [None]  # Começa com None para a opção padrão
-
-    if extra_cols:
-        if all(col in current_df.columns for col in extra_cols):
-            current_df["display_name"] = (
-                current_df[extra_cols[0]].astype(str)
-                + " - "
-                + current_df[extra_cols[1]].astype(str)
-                + " ("
-                + current_df[extra_cols[2]].astype(str)
-                + ")"
-            )
-            options_map.update(
-                {row["id"]: row["display_name"] for _, row in current_df.iterrows()}
-            )
-            ids_list.extend(current_df["id"].tolist())
-        else:  # Fallback se colunas extras não existirem
-            options_map.update(
-                {
-                    row["id"]: str(row.get("id", "ID Inválido"))
-                    for _, row in current_df.iterrows()
-                }
-            )
-            ids_list.extend(current_df["id"].tolist())
+    ids_list = [None]
+    if extra_cols and all(col in current_df.columns for col in extra_cols):
+        current_df["display_name"] = (
+            current_df[extra_cols[0]].astype(str)
+            + " - "
+            + current_df[extra_cols[1]].astype(str)
+            + " ("
+            + current_df[extra_cols[2]].astype(str)
+            + ")"
+        )
+        options_map.update(
+            {row["id"]: row["display_name"] for _, row in current_df.iterrows()}
+        )
     elif name_col in current_df.columns:
         options_map.update(
             {row["id"]: row[name_col] for _, row in current_df.iterrows()}
         )
-        ids_list.extend(current_df["id"].tolist())
-    else:  # Fallback se name_col não existir
+    else:
         options_map.update(
             {
                 row["id"]: str(row.get("id", "ID Inválido"))
                 for _, row in current_df.iterrows()
             }
         )
-        ids_list.extend(current_df["id"].tolist())
-
+    ids_list.extend(current_df["id"].tolist())
     return options_map, ids_list
 
 
@@ -701,23 +633,19 @@ def get_options_map(
 st.set_page_config(layout="wide", page_title=APP_TITLE)
 st.title(APP_TITLE)
 
-# Carregar dados principais uma vez por execução do script
 biddings_df = load_biddings_from_db()
-items_df = load_items_from_db()  # Carrega todos os itens, será filtrado depois
+items_df = load_items_from_db()
 suppliers_df = load_suppliers_from_db()
 competitors_df = load_competitors_from_db()
 quotes_df = load_quotes_from_db()
 bids_df = load_bids_from_db()
 
-
-# --- Seleção de Licitação e Botão de Gerenciamento ---
 col_bid_select, col_bid_manage_btn = st.columns([5, 2], vertical_alignment="bottom")
 bidding_options_map, bidding_option_ids = get_options_map(
     df_input=biddings_df,
     extra_cols=["process_number", "city", "mode"],
     default_message=DEFAULT_BIDDING_SELECT_MESSAGE,
 )
-
 with col_bid_select:
     selected_bidding_id_from_sb = st.selectbox(
         "Escolha uma Licitação:",
@@ -736,7 +664,6 @@ with col_bid_manage_btn:
     ):
         st.session_state.editing_bidding_id = selected_bidding_id_from_sb
         st.session_state.show_manage_bidding_dialog = True
-
 if selected_bidding_id_from_sb != st.session_state.selected_bidding_id:
     st.session_state.selected_bidding_id = selected_bidding_id_from_sb
     st.session_state.selected_bidding_name_for_display = (
@@ -746,17 +673,14 @@ if selected_bidding_id_from_sb != st.session_state.selected_bidding_id:
     )
     st.session_state.selected_item_id = None
     st.session_state.selected_item_name_for_display = None
-
 if st.session_state.show_manage_bidding_dialog:
     manage_bidding_dialog_wrapper()
 
-# --- Seleção de Item e Botão de Gerenciamento ---
 items_df_for_select = pd.DataFrame()
 if st.session_state.selected_bidding_id is not None:
     col_item_select, col_item_manage_btn = st.columns(
         [5, 2], vertical_alignment="bottom"
     )
-
     items_df_for_select = items_df[
         items_df["bidding_id"] == st.session_state.selected_bidding_id
     ]
@@ -765,7 +689,6 @@ if st.session_state.selected_bidding_id is not None:
         name_col="name",
         default_message=DEFAULT_ITEM_SELECT_MESSAGE,
     )
-
     with col_item_select:
         bidding_display_label = (
             st.session_state.selected_bidding_name_for_display
@@ -790,7 +713,6 @@ if st.session_state.selected_bidding_id is not None:
             )
             st.session_state.editing_item_id = selected_item_id_from_sb
             st.session_state.show_manage_item_dialog = True
-
     if selected_item_id_from_sb != st.session_state.selected_item_id:
         st.session_state.selected_item_id = selected_item_id_from_sb
         st.session_state.selected_item_name_for_display = (
@@ -798,14 +720,12 @@ if st.session_state.selected_bidding_id is not None:
             if selected_item_id_from_sb is not None
             else None
         )
-
 if st.session_state.show_manage_item_dialog:
     if st.session_state.parent_bidding_id_for_item_dialog is not None:
         manage_item_dialog_wrapper()
     else:
         st.session_state.show_manage_item_dialog = False
 
-# --- Exibição de Informações do Item, Expanders, Tabelas e Gráficos ---
 if st.session_state.selected_item_id is not None:
     try:
         if not items_df_for_select.empty:
@@ -867,16 +787,14 @@ if st.session_state.selected_item_id is not None:
                             )
                             if st.form_submit_button("💾 Salvar Orçamento"):
                                 if selected_supplier_id_quote and quote_price > 0:
-                                    current_time = datetime.now()
                                     new_quote_data = {
                                         "item_id": st.session_state.selected_item_id,
                                         "supplier_id": selected_supplier_id_quote,
                                         "price": quote_price,
                                         "notes": quote_notes,
-                                        "created_at": current_time,
-                                        "updated_at": current_time,
+                                        "created_at": datetime.now(),
+                                        "updated_at": datetime.now(),
                                     }
-                                    # TODO: Chamar db_create_entity para 'quote'
                                     created_quote = db_create_entity(
                                         "quote", new_quote_data
                                     )
@@ -939,7 +857,6 @@ if st.session_state.selected_item_id is not None:
                                         "created_at": current_time,
                                         "updated_at": current_time,
                                     }
-                                    # TODO: Chamar db_create_entity para 'bid'
                                     created_bid = db_create_entity("bid", new_bid_data)
                                     st.success("Lance adicionado!")
                                     st.rerun()
@@ -954,10 +871,22 @@ if st.session_state.selected_item_id is not None:
                 bids_for_item_df_display = bids_df[
                     bids_df["item_id"] == st.session_state.selected_item_id
                 ].copy()
-
-                # Merging supplier/competitor names for display (assuming they are loaded in quotes_df/bids_df by load functions)
-                # If not, this merge logic might need to happen in the load_quotes/bids_from_db or be adjusted here.
-                # For now, assuming 'supplier_name' and 'competitor_name' are already in the DFs from load functions.
+                if not quotes_for_item_df_display.empty and not suppliers_df.empty:
+                    quotes_for_item_df_display = pd.merge(
+                        quotes_for_item_df_display,
+                        suppliers_df[["id", "name"]],
+                        left_on="supplier_id",
+                        right_on="id",
+                        how="left",
+                    ).rename(columns={"name": "supplier_name"})
+                if not bids_for_item_df_display.empty and not competitors_df.empty:
+                    bids_for_item_df_display = pd.merge(
+                        bids_for_item_df_display,
+                        competitors_df[["id", "name"]],
+                        left_on="competitor_id",
+                        right_on="id",
+                        how="left",
+                    ).rename(columns={"name": "competitor_name"})
 
                 table_cols_display = st.columns(2)
                 with table_cols_display[0]:
@@ -971,7 +900,7 @@ if st.session_state.selected_item_id is not None:
                             use_container_width=True,
                         )
                     else:
-                        st.info("Nenhum orçamento cadastrado para este item.")
+                        st.info("Nenhum orçamento cadastrado.")
                 with table_cols_display[1]:
                     st.markdown("##### Lances Recebidos")
                     if not bids_for_item_df_display.empty:
@@ -994,7 +923,7 @@ if st.session_state.selected_item_id is not None:
                             use_container_width=True,
                         )
                     else:
-                        st.info("Nenhum lance cadastrado para este item.")
+                        st.info("Nenhum lance cadastrado.")
 
                 st.markdown("---")
                 st.subheader("Gráficos do Item")
@@ -1037,7 +966,6 @@ if st.session_state.selected_item_id is not None:
             st.session_state.selected_item_id = None
             st.session_state.selected_item_name_for_display = None
 
-# Abrir diálogos de gerenciamento de Fornecedores/Concorrentes se flags estiverem ativas
 if st.session_state.get("show_manage_supplier_dialog", False):
     manage_supplier_dialog_wrapper()
 if st.session_state.get("show_manage_competitor_dialog", False):
