@@ -429,6 +429,7 @@ if st.session_state.selected_item_id is not None:
                                 st.session_state.show_manage_supplier_dialog = True
                         with st.form(key="new_quote_form"):
                             quote_price = st.number_input("Preço do Orçamento*", min_value=0.01, format="%.2f", key="quote_price_input_exp")
+                            quote_margin = st.number_input("Margem*", min_value=0.0, format="%.2f", key="quote_margin_input_exp", help="Valor da margem em decimal. Ex: 0.2 para 20%")
                             quote_notes = st.text_area("Notas do Orçamento", key="quote_notes_input_exp")
                             if st.form_submit_button("💾 Salvar Orçamento"):
                                 if selected_supplier_id_quote and quote_price > 0 and st.session_state.selected_item_id is not None:
@@ -437,6 +438,7 @@ if st.session_state.selected_item_id is not None:
                                             item_id=st.session_state.selected_item_id,
                                             supplier_id=selected_supplier_id_quote,
                                             price=quote_price,
+                                            margin=quote_margin, # Added margin
                                             notes=quote_notes
                                         )
                                         quote_repo.add(new_quote)
