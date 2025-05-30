@@ -504,7 +504,14 @@ if st.session_state.selected_item_id is not None:
                 table_cols_display = st.columns(2) 
                 with table_cols_display[0]:
                     st.markdown("##### Orçamentos Recebidos")
-                    if not quotes_for_item_df_display.empty: st.dataframe(quotes_for_item_df_display[['supplier_name', 'price', 'notes', 'updated_at']], hide_index=True, use_container_width=True)
+                    # Add formatting for date columns
+                    if not quotes_for_item_df_display.empty: # Check if DataFrame is not empty before formatting
+                        if 'created_at' in quotes_for_item_df_display.columns:
+                            quotes_for_item_df_display['created_at'] = pd.to_datetime(quotes_for_item_df_display['created_at']).dt.strftime('%Y-%m-%d %H:%M:%S')
+                        if 'update_at' in quotes_for_item_df_display.columns and pd.notnull(quotes_for_item_df_display['update_at']).all():
+                            quotes_for_item_df_display['update_at'] = pd.to_datetime(quotes_for_item_df_display['update_at']).dt.strftime('%Y-%m-%d %H:%M:%S')
+
+                    if not quotes_for_item_df_display.empty: st.dataframe(quotes_for_item_df_display[['supplier_name', 'price', 'created_at', 'update_at', 'notes']], hide_index=True, use_container_width=True)
                     else: st.info("Nenhum orçamento cadastrado para este item.")
                 with table_cols_display[1]:
                     st.markdown("##### Lances Recebidos")
