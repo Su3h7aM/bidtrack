@@ -48,9 +48,9 @@ def create_quotes_figure(quotes_df_display: pd.DataFrame) -> go.Figure:
     return fig
 
 def create_bids_figure(bids_df_display: pd.DataFrame, min_quote_price: float = None) -> go.Figure:
-    if 'timestamp' in bids_df_display.columns and not bids_df_display['timestamp'].isnull().all():
-        b_df_sorted = bids_df_display.sort_values(by='timestamp') if len(bids_df_display) > 1 else bids_df_display
-        fig = px.line(b_df_sorted, x='timestamp', y='price', color='competitor_name', title="Evolução dos Lances ao Longo do Tempo", labels={'timestamp': 'Momento do Lance', 'price': 'Preço do Lance (R$)', 'competitor_name': 'Concorrente'}, markers=True)
+    if 'created_at' in bids_df_display.columns and not bids_df_display['created_at'].isnull().all():
+        b_df_sorted = bids_df_display.sort_values(by='created_at') if len(bids_df_display) > 1 else bids_df_display
+        fig = px.line(b_df_sorted, x='created_at', y='price', color='competitor_name', title="Evolução dos Lances ao Longo do Tempo", labels={'created_at': 'Momento do Lance', 'price': 'Preço do Lance (R$)', 'competitor_name': 'Concorrente'}, markers=True)
     else: 
         fig = px.bar(bids_df_display, x='competitor_name', y='price', title="Comparativo de Preços dos Lances (sem timestamp)", labels={'competitor_name': 'Concorrente', 'price': 'Preço do Lance (R$)'}, color='competitor_name', text_auto=True)
     fig.update_layout(dragmode='pan', legend_title_text='Concorrentes') 
@@ -508,8 +508,14 @@ if st.session_state.selected_item_id is not None:
                     st.markdown("##### Lances Recebidos")
                     if not bids_for_item_df_display.empty:
                         bids_to_show = bids_for_item_df_display.copy(); 
-                        if 'timestamp' in bids_to_show.columns: bids_to_show['timestamp'] = pd.to_datetime(bids_to_show['timestamp']).dt.strftime('%Y-%m-%d %H:%M:%S')
-                        st.dataframe(bids_to_show[['competitor_name', 'price', 'timestamp', 'notes', 'updated_at']], hide_index=True, use_container_width=True)
+                        if 'created_at' in bids_to_show.columns: # Check for created_at now
+                            bids_to_show['created_at'] = pd.to_datetime(bids_to_show['created_at']).dt.strftime('%Y-%m-%d %H:%M:%S')
+                        if 'update_at' in bids_to_show.columns and pd.notnull(bids_to_show['update_at']).all(): # ensure not all are NaT/None
+                            bids_to_show['update_at'] = pd.to_datetime(bids_to_show['update_at']).dt.strftime('%Y-%m-%d %H:%M:%S')
+                        # The model has 'updated_at'. If 'update_at' is truly intended for display,
+                        # it must be present in bids_to_show DataFrame.
+                        # Let's assume 'update_at' is a specific column name in the DataFrame for display purposes.
+                        st.dataframe(bids_to_show[['competitor_name', 'price', 'created_at', 'notes', 'update_at']], hide_index=True, use_container_width=True)
                     else: st.info("Nenhum lance cadastrado para este item.")
 
                 st.markdown("---"); st.subheader("Gráficos do Item")
