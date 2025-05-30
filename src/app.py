@@ -77,7 +77,7 @@ def _manage_generic_dialog(
     if st.session_state[editing_id_key] is not None:
         try:
             # Fetch entity from DB for editing
-            entity_to_edit = repo.get_by_id(st.session_state[editing_id_key])
+            entity_to_edit = repo.get(st.session_state[editing_id_key]) # Changed get_by_id to get
             if not entity_to_edit:
                 st.error(f"{title_singular} não encontrado(a) para edição (ID: {st.session_state[editing_id_key]})."); st.session_state[show_dialog_key] = False; st.session_state[editing_id_key] = None; st.rerun(); return
 
@@ -280,7 +280,7 @@ def manage_item_dialog_wrapper():
     parent_bidding_id = st.session_state.parent_bidding_id_for_item_dialog
     if parent_bidding_id is None: st.error("Licitação pai não definida."); st.session_state.show_manage_item_dialog = False; st.rerun(); return
 
-    parent_bidding = bidding_repo.get_by_id(parent_bidding_id)
+    parent_bidding = bidding_repo.get(parent_bidding_id) # Changed get_by_id to get
     if not parent_bidding:
         st.error("Licitação pai não encontrada."); st.session_state.show_manage_item_dialog = False; st.rerun(); return
     st.info(f"Para Licitação: {parent_bidding.process_number} - {parent_bidding.city}")
