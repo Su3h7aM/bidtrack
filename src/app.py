@@ -86,8 +86,22 @@ def _manage_generic_dialog(
                 for field_key, config_val in form_fields_config.items(): # Use items() for better access
                     if isinstance(config_val, dict): # Check if it's a field config
                         model_attr = field_key
-                        if entity_type == "item" and field_key == "description":
+                        if field_key == "description" and entity_type in ["item", "supplier", "competitor"]:
                             model_attr = "desc"
+
+                        # Special handling for Bidding date/time form population
+                        if entity_type == "bidding" and field_key == "session_date":
+                            if hasattr(entity_to_edit, "date") and entity_to_edit.date:
+                                data[field_key] = entity_to_edit.date.date()
+                            else:
+                                data[field_key] = config_val.get('default') # Or None
+                            continue # Skip generic getattr for this field
+                        elif entity_type == "bidding" and field_key == "session_time":
+                            if hasattr(entity_to_edit, "date") and entity_to_edit.date:
+                                data[field_key] = entity_to_edit.date.time()
+                            else:
+                                data[field_key] = config_val.get('default') # Or None
+                            continue # Skip generic getattr for this field
 
                         if hasattr(entity_to_edit, model_attr):
                             data[field_key] = getattr(entity_to_edit, model_attr)
@@ -145,8 +159,21 @@ def _manage_generic_dialog(
                 current_time = datetime.now()
                 save_data = {k: v for k, v in form_data_submitted.items() if k in form_fields_config}
 
-                if entity_type == "item" and "description" in save_data:
+                if entity_type in ["item", "supplier", "competitor"] and "description" in save_data:
                     save_data["desc"] = save_data.pop("description")
+
+                if entity_type == "bidding":
+                    session_date_val = save_data.pop("session_date", None)
+                    session_time_val = save_data.pop("session_time", None)
+
+                    if session_date_val: # session_date_val is a datetime.date object
+                        if session_time_val: # session_time_val is a datetime.time object
+                            save_data["date"] = datetime.combine(session_date_val, session_time_val)
+                        else:
+                            # If time is not provided, default to midnight (start of the day)
+                            save_data["date"] = datetime.combine(session_date_val, time.min)
+                    else:
+                        save_data["date"] = None # If date is not provided, date field in model is None
 
                 # Handle date/time conversions that might be strings from form
                 for field, config in form_fields_config.items():
