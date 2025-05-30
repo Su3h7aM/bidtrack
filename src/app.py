@@ -82,9 +82,20 @@ def _manage_generic_dialog(
                 st.error(f"{title_singular} não encontrado(a) para edição (ID: {st.session_state[editing_id_key]})."); st.session_state[show_dialog_key] = False; st.session_state[editing_id_key] = None; st.rerun(); return
 
             # Populate form data from the fetched entity
-            for field in form_fields_config.keys():
-                if hasattr(entity_to_edit, field): data[field] = getattr(entity_to_edit, field)
-            data['id'] = entity_to_edit.id # Keep id for context, though not directly part of form fields always
+            if entity_to_edit: # Ensure entity_to_edit is not None
+                for field_key, config_val in form_fields_config.items(): # Use items() for better access
+                    if isinstance(config_val, dict): # Check if it's a field config
+                        model_attr = field_key
+                        if entity_type == "item" and field_key == "description":
+                            model_attr = "desc"
+
+                        if hasattr(entity_to_edit, model_attr):
+                            data[field_key] = getattr(entity_to_edit, model_attr)
+                        elif 'default' in config_val: # Fallback to default if attr not present
+                             data[field_key] = config_val['default']
+                        else:
+                             data[field_key] = '' # Or some other suitable default
+                data['id'] = entity_to_edit.id
             dialog_mode = "edit"
         except Exception as e: # Catch potential errors during DB fetch or attribute access
             st.error(f"Erro ao carregar {title_singular} para edição: {e}"); st.session_state[show_dialog_key] = False; st.session_state[editing_id_key] = None; st.rerun(); return
@@ -133,6 +144,9 @@ def _manage_generic_dialog(
             else:
                 current_time = datetime.now()
                 save_data = {k: v for k, v in form_data_submitted.items() if k in form_fields_config}
+
+                if entity_type == "item" and "description" in save_data:
+                    save_data["desc"] = save_data.pop("description")
 
                 # Handle date/time conversions that might be strings from form
                 for field, config in form_fields_config.items():
@@ -395,7 +409,7 @@ if st.session_state.selected_item_id is not None:
             if current_item_details_list:
                 current_item_details = current_item_details_list[0]
                 st.markdown(f"**Item Selecionado:** {current_item_details.name} (ID: {st.session_state.selected_item_id})")
-                st.markdown(f"**Descrição:** {current_item_details.description}")
+                st.markdown(f"**Descrição:** {current_item_details.desc}")
                 st.markdown(f"**Quantidade:** {current_item_details.quantity} {current_item_details.unit}")
                 st.markdown("---")
 
