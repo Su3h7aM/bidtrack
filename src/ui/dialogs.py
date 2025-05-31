@@ -141,6 +141,13 @@ def _save_entity_data(
 
     title_singular = form_fields_config.get("_title_singular", entity_type.capitalize())
 
+    # Convert empty strings to None for specific optional fields before saving
+    if entity_type in ["supplier", "competitor"]:
+        # "description" from form_fields_config maps to "desc" in save_data at this point
+        fields_to_nullify_if_empty = ["website", "email", "phone", "desc"]
+        for field_name in fields_to_nullify_if_empty:
+            if field_name in save_data and save_data[field_name] == "":
+                save_data[field_name] = None
 
     try:
         if dialog_mode == "new":
