@@ -1,24 +1,25 @@
 from abc import ABC, abstractmethod
-from typing import override
+from typing import TypeVar, Generic, List, Optional # Dict, Any (not strictly needed for this fix)
 from sqlalchemy import Engine
 from sqlmodel import SQLModel, create_engine, Session, select
 
+T = TypeVar('T')
 
-class Repository[T](ABC):
+class Repository(Generic[T], ABC):
     @abstractmethod
     def add(self, item: T) -> T: # Changed return type to T
         raise NotImplementedError
 
     @abstractmethod
-    def get(self, id: int) -> T | None:
+    def get(self, id: int) -> Optional[T]: # Use Optional[T] for clarity
         raise NotImplementedError
 
     @abstractmethod
-    def get_all(self) -> list[T] | None:
+    def get_all(self) -> Optional[List[T]]: # Use Optional[List[T]]
         raise NotImplementedError
 
     @abstractmethod
-    def update(self, item_id: int, item_data: dict) -> T | None:
+    def update(self, item_id: int, item_data: dict) -> Optional[T]: # Use Optional[T]
         raise NotImplementedError
 
     @abstractmethod
@@ -26,7 +27,7 @@ class Repository[T](ABC):
         raise NotImplementedError
 
 
-class SQLModelRepository[T](Repository[T]):
+class SQLModelRepository(Repository[T]):
     def __init__(
         self, model: type[T], db_url: str = "sqlite:///data/bidtrack.db"
     ) -> None:
@@ -53,7 +54,6 @@ class SQLModelRepository[T](Repository[T]):
         return Session(self.engine)
 
 
-    @override
     def add(self, item: T) -> T: # Changed return type to T
         # Use a context manager for session once session management is refined
         current_session = self.session
@@ -62,18 +62,15 @@ class SQLModelRepository[T](Repository[T]):
         current_session.refresh(item)
         return item
 
-    @override
-    def get(self, id: int) -> T | None:
+    def get(self, id: int) -> Optional[T]:
         return self.session.get(self.model, id)
 
-    @override
-    def get_all(self) -> list[T] | None:
+    def get_all(self) -> Optional[List[T]]:
         statement = select(self.model)
         all_items = self.session.exec(statement).all()
-        return list(all_items)
+        return list(all_items) # exec().all() returns a list, so Optional might be for empty list case
 
-    @override
-    def update(self, item_id: int, data_to_update: dict) -> T | None:
+    def update(self, item_id: int, data_to_update: dict) -> Optional[T]:
         current_session = self.session
         db_item = current_session.get(self.model, item_id)
         if db_item:
@@ -85,7 +82,6 @@ class SQLModelRepository[T](Repository[T]):
             current_session.refresh(db_item)
         return db_item
 
-    @override
     def delete(self, id: int) -> bool:
         current_session = self.session
         item = current_session.get(self.model, id)

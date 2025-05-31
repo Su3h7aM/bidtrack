@@ -12,7 +12,7 @@ from sqlmodel import (
 )
 
 
-class Quote(SQLModel, table=True):
+class Quote(SQLModel, table=True, table_kwargs={"extend_existing": True}):
     id: int | None = Field(default=None, primary_key=True)
 
     created_at: datetime | None = Field(
@@ -33,7 +33,7 @@ class Quote(SQLModel, table=True):
     notes: str | None = Field(default=None)
 
 
-class Bid(SQLModel, table=True):
+class Bid(SQLModel, table=True, table_kwargs={"extend_existing": True}):
     id: int | None = Field(default=None, primary_key=True)
 
     created_at: datetime | None = Field(
@@ -60,7 +60,7 @@ class BiddingMode(str, PyEnum):
     PE = "Pregão Eletrônico"
 
 
-class Bidding(SQLModel, table=True):
+class Bidding(SQLModel, table=True, table_kwargs={"extend_existing": True}):
     id: int | None = Field(default=None, primary_key=True)
 
     created_at: datetime | None = Field(
@@ -79,7 +79,7 @@ class Bidding(SQLModel, table=True):
     items: list["Item"] | None = Relationship(back_populates="bidding")
 
 
-class Item(SQLModel, table=True):
+class Item(SQLModel, table=True, table_kwargs={"extend_existing": True}):
     id: int | None = Field(default=None, primary_key=True)
 
     created_at: datetime | None = Field(
@@ -106,7 +106,7 @@ class Item(SQLModel, table=True):
     )
 
 
-class Supplier(SQLModel, table=True):
+class Supplier(SQLModel, table=True, table_kwargs={"extend_existing": True}):
     id: int | None = Field(default=None, primary_key=True)
 
     created_at: datetime | None = Field(
@@ -128,7 +128,7 @@ class Supplier(SQLModel, table=True):
     )
 
 
-class Competitor(SQLModel, table=True):
+class Competitor(SQLModel, table=True, table_kwargs={"extend_existing": True}):
     id: int | None = Field(default=None, primary_key=True)
 
     created_at: datetime | None = Field(

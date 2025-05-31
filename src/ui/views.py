@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
-from repository import SQLModelRepository
-from db.models import Bidding, Item, Supplier, Competitor, Quote, Bid, BiddingMode
+from src.repository import SQLModelRepository # Changed to absolute import
+from src.db.models import Bidding, Item, Supplier, Competitor, Quote, Bid, BiddingMode # Changed to absolute import
 from typing import List
 
 # [render_licitacoes_tab function code - assumed to be here and correct]
@@ -583,5 +583,3 @@ def render_lances_tab(bid_repo: SQLModelRepository[Bid], item_repo: SQLModelRepo
             hide_index=True,
             use_container_width=True
         )
-
-```
