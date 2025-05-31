@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+from decimal import Decimal
 
 from db.models import Bidding, Item, Supplier, Competitor, Quote, Bid # Added BiddingMode as it's used by Bidding
 from repository import SQLModelRepository
@@ -17,12 +18,12 @@ from ui.dialogs import (
 # --- Database Repository Instances ---
 db_url = "sqlite:///data/bidtrack.db" # Define the database URL
 
-bidding_repo = SQLModelRepository(Bidding, db_url)
-item_repo = SQLModelRepository(Item, db_url)
-supplier_repo = SQLModelRepository(Supplier, db_url)
-competitor_repo = SQLModelRepository(Competitor, db_url)
-quote_repo = SQLModelRepository(Quote, db_url)
-bid_repo = SQLModelRepository(Bid, db_url)
+bidding_repo: SQLModelRepository[Bidding] = SQLModelRepository(Bidding, db_url)
+item_repo: SQLModelRepository[Item] = SQLModelRepository(Item, db_url)
+supplier_repo: SQLModelRepository[Supplier] = SQLModelRepository(Supplier, db_url)
+competitor_repo: SQLModelRepository[Competitor] = SQLModelRepository(Competitor, db_url)
+quote_repo: SQLModelRepository[Quote] = SQLModelRepository(Quote, db_url)
+bid_repo: SQLModelRepository[Bid] = SQLModelRepository(Bid, db_url)
 
 # --- Constants ---
 DEFAULT_BIDDING_SELECT_MESSAGE = "Selecione ou Cadastre uma Licitação..."
@@ -145,7 +146,7 @@ if st.session_state.selected_item_id is not None:
                                         new_quote = Quote(
                                             item_id=st.session_state.selected_item_id,
                                             supplier_id=selected_supplier_id_quote,
-                                            price=quote_price,
+                                            price=Decimal(str(quote_price)),
                                             margin=quote_margin, # Added margin
                                             notes=quote_notes
                                         )
@@ -179,7 +180,7 @@ if st.session_state.selected_item_id is not None:
                                             item_id=st.session_state.selected_item_id,
                                             bidding_id=current_item_details.bidding_id, # Sourced from current_item_details
                                             competitor_id=selected_competitor_id_bid,
-                                            price=bid_price,
+                                            price=Decimal(str(bid_price)),
                                             notes=bid_notes
                                         )
                                         bid_repo.add(new_bid)

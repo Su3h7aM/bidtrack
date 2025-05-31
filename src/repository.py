@@ -1,24 +1,25 @@
 from abc import ABC, abstractmethod
-from typing import override
+from typing import override, TypeVar, Generic, Type, Optional, Any, List
 from sqlalchemy import Engine
 from sqlmodel import SQLModel, create_engine, Session, select
 
+ModelT = TypeVar("ModelT", bound=SQLModel)
 
-class Repository[T](ABC):
+class Repository(ABC, Generic[ModelT]): # Made base Repository also use ModelT for consistency
     @abstractmethod
-    def add(self, item: T) -> T: # Changed return type to T
+    def add(self, item: ModelT) -> ModelT:
         raise NotImplementedError
 
     @abstractmethod
-    def get(self, id: int) -> T | None:
+    def get(self, id: int) -> Optional[ModelT]:
         raise NotImplementedError
 
     @abstractmethod
-    def get_all(self) -> list[T] | None:
+    def get_all(self) -> Optional[List[ModelT]]: # Adjusted to Optional[List[ModelT]]
         raise NotImplementedError
 
     @abstractmethod
-    def update(self, item_id: int, item_data: dict) -> T | None:
+    def update(self, item_id: int, item_data: dict[str, Any]) -> Optional[ModelT]:
         raise NotImplementedError
 
     @abstractmethod
@@ -26,36 +27,24 @@ class Repository[T](ABC):
         raise NotImplementedError
 
 
-class SQLModelRepository[T](Repository[T]):
+class SQLModelRepository(Repository[ModelT], Generic[ModelT]):
     def __init__(
-        self, model: type[T], db_url: str = "sqlite:///data/bidtrack.db"
+        self, model_class: Type[ModelT], db_url: str = "sqlite:///data/bidtrack.db" # Changed 'model' to 'model_class'
     ) -> None:
-        self.model: type[T] = model
+        self.model_class: Type[ModelT] = model_class # Changed 'model' to 'model_class'
         self.engine: Engine = create_engine(db_url)
-        SQLModel.metadata.create_all(self.engine)
-        # self.session: Session = Session(self.engine) # Session should be created per request or context
-        self._sessionmaker = Session(self.engine) # Store the session factory
+        SQLModel.metadata.create_all(self.engine) # This should be called once, ideally not in __init__ of every repo instance
+        self._sessionmaker = Session(self.engine)
 
-    # It's generally better to manage session scope, e.g., per request in a web app,
-    # or per operation for command-line tools. For this Streamlit app,
-    # a new session per method call or a short-lived session might be appropriate.
-    # For simplicity here, let's create a new session if one isn't active,
-    # but be mindful this isn't ideal for all scenarios.
     @property
     def session(self) -> Session:
-        # This is a simplified session management. In a real app, use context managers.
-        # For Streamlit, this might be okay if operations are relatively atomic.
-        # If _sessionmaker is already a session instance due to previous __init__
         if isinstance(self._sessionmaker, Session) and self._sessionmaker.is_active:
              return self._sessionmaker
-        # Otherwise, create a new session from the engine if _sessionmaker was the factory
-        # For now, let's assume self.engine is what we want to use for new sessions.
         return Session(self.engine)
 
 
     @override
-    def add(self, item: T) -> T: # Changed return type to T
-        # Use a context manager for session once session management is refined
+    def add(self, item: ModelT) -> ModelT:
         current_session = self.session
         current_session.add(item)
         current_session.commit()
@@ -63,24 +52,24 @@ class SQLModelRepository[T](Repository[T]):
         return item
 
     @override
-    def get(self, id: int) -> T | None:
-        return self.session.get(self.model, id)
+    def get(self, id: int) -> Optional[ModelT]: # Changed T | None to Optional[ModelT]
+        return self.session.get(self.model_class, id)
 
     @override
-    def get_all(self) -> list[T] | None:
-        statement = select(self.model)
+    def get_all(self) -> Optional[List[ModelT]]: # Changed list[T] | None to Optional[List[ModelT]]
+        statement = select(self.model_class)
         all_items = self.session.exec(statement).all()
-        return list(all_items)
+        return list(all_items) if all_items is not None else None # Ensure None is returned if query result is None
 
     @override
-    def update(self, item_id: int, data_to_update: dict) -> T | None:
+    def update(self, item_id: int, item_data: dict[str, Any]) -> Optional[ModelT]: # Changed T | None to Optional[ModelT]
         current_session = self.session
-        db_item = current_session.get(self.model, item_id)
+        db_item = current_session.get(self.model_class, item_id)
         if db_item:
-            for key, value in data_to_update.items():
-                if hasattr(db_item, key): # Ensure the attribute exists
+            for key, value in item_data.items(): # Changed data_to_update to item_data
+                if hasattr(db_item, key):
                     setattr(db_item, key, value)
-            current_session.add(db_item) # Re-adding is often good practice
+            current_session.add(db_item)
             current_session.commit()
             current_session.refresh(db_item)
         return db_item
@@ -88,7 +77,7 @@ class SQLModelRepository[T](Repository[T]):
     @override
     def delete(self, id: int) -> bool:
         current_session = self.session
-        item = current_session.get(self.model, id)
+        item = current_session.get(self.model_class, id) # Fixed self.model to self.model_class
         if item:
             current_session.delete(item)
             current_session.commit()

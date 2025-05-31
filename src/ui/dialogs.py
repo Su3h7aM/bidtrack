@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, time, date # Ensure date is also imported
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Callable
 
 # Assuming repository instances are defined in app.py or a similar accessible module
 # This will likely need adjustment in a later step to avoid circular dependencies
@@ -13,10 +13,10 @@ from typing import Any, Dict, Optional
 # For the purpose of this step, we assume these can be imported.
 # If not, they would need to be passed as arguments.
 from repository import SQLModelRepository # This is a generic type, not an instance
-from db.models import BiddingMode # Added import
+from db.models import BiddingMode, Bidding, Item, Supplier, Competitor, Quote, Bid # Added import
 
 # --- Definições de Configuração dos Formulários ---
-bidding_form_config = {
+bidding_form_config: dict[str, dict[str, Any]] = {
     'process_number': {'label': 'Nº do Processo*', 'type': 'text_input', 'required': True},
     'city': {'label': 'Cidade*', 'type': 'text_input', 'required': True},
     'mode': {
@@ -30,13 +30,13 @@ bidding_form_config = {
     'session_date': {'label': 'Data da Sessão (Opcional)', 'type': 'date_input', 'default': None},
     'session_time': {'label': 'Hora da Sessão (Opcional)', 'type': 'time_input', 'default': None}
 }
-item_form_config = {
+item_form_config: dict[str, dict[str, Any]] = {
     'name': {'label': 'Nome do Item*', 'type': 'text_input', 'required': True},
     'description': {'label': 'Descrição', 'type': 'text_area', 'default': ''},
     'quantity': {'label': 'Quantidade*', 'type': 'number_input', 'min_value': 1.0, 'default': 1.0, 'required': True, 'step': 1.0},
     'unit': {'label': 'Unidade*', 'type': 'text_input', 'default': 'UN', 'required': True}
 }
-contact_entity_form_config = {
+contact_entity_form_config: dict[str, dict[str, Any]] = {
     'name': {'label': 'Nome*', 'type': 'text_input', 'required': True},
     'website': {'label': 'Website', 'type': 'text_input', 'default': ''},
     'email': {'label': 'Email', 'type': 'text_input', 'default': ''},
@@ -47,11 +47,11 @@ contact_entity_form_config = {
 # --- Helper Functions for _manage_generic_dialog ---
 
 def _render_form_fields(
-    form_fields_config: Dict[str, Dict[str, Any]],
-    current_data: Dict[str, Any]
-) -> Dict[str, Any]:
+    form_fields_config: dict[str, dict[str, Any]],
+    current_data: dict[str, Any]
+) -> dict[str, Any]:
     """Renders form fields based on configuration and current data."""
-    form_data_submitted = {}
+    form_data_submitted: dict[str, Any] = {}
     for field, config in form_fields_config.items():
         if not isinstance(config, dict):
             continue
@@ -107,9 +107,9 @@ def _render_form_fields(
 
 def _save_entity_data(
     entity_type: str,
-    repo: SQLModelRepository,
-    form_data_submitted: Dict[str, Any],
-    form_fields_config: Dict[str, Dict[str, Any]],
+    repo: SQLModelRepository[Any],
+    form_data_submitted: dict[str, Any],
+    form_fields_config: dict[str, dict[str, Any]],
     dialog_mode: str,
     editing_id: Any = None,
     parent_id_field_name: Optional[str] = None,
@@ -125,7 +125,7 @@ def _save_entity_data(
         return False
 
     current_time = datetime.now()
-    save_data = {k: v for k, v in form_data_submitted.items() if k in form_fields_config}
+    save_data: dict[str, Any] = {k: v for k, v in form_data_submitted.items() if k in form_fields_config}
 
     if entity_type in ["item", "supplier", "competitor"] and "description" in save_data:
         save_data["desc"] = save_data.pop("description")
@@ -175,25 +175,30 @@ def _save_entity_data(
             created_entity = repo.add(new_entity_model)
             display_name = getattr(created_entity, 'name', getattr(created_entity, 'process_number', ''))
             st.success(f"{title_singular} '{display_name}' (ID: {created_entity.id}) criado(a) com sucesso!")
+            return True # Moved into new block
         else:  # dialog_mode == "edit"
             if editing_id is None:
                 st.error(f"ID de edição não fornecido para {title_singular}.")
                 return False
             save_data['updated_at'] = current_time
             updated_entity = repo.update(editing_id, save_data)
-            display_name = getattr(updated_entity, 'name', getattr(updated_entity, 'process_number', ''))
-            st.success(f"{title_singular} '{display_name}' (ID: {updated_entity.id}) atualizado(a) com sucesso!")
-        return True
+            if updated_entity:
+                display_name = getattr(updated_entity, 'name', getattr(updated_entity, 'process_number', ''))
+                st.success(f"{title_singular} '{display_name}' (ID: {updated_entity.id}) atualizado(a) com sucesso!")
+                return True # Moved here
+            else:
+                st.error(f"Falha ao atualizar {title_singular.lower()} (ID: {editing_id}). Item não encontrado ou erro na atualização.")
+                return False # Added this
     except Exception as e:
         st.error(f"Erro ao salvar {title_singular}: {e}")
         return False
 
 def _handle_entity_deletion(
     entity_type: str,
-    repo: SQLModelRepository,
+    repo: SQLModelRepository[Any],
     editing_id: Any,
-    entity_data: Dict[str, Any], # To get name for display
-    related_entities_to_delete_config: Dict[str, SQLModelRepository], # e.g. {"items": item_repo, "quotes": quote_repo}
+    entity_data: dict[str, Any], # To get name for display
+    related_entities_to_delete_config: Optional[dict[str, SQLModelRepository[Any]]], # e.g. {"items": item_repo, "quotes": quote_repo}
     title_singular: str
 ) -> bool:
     """Handles entity deletion including related entities. Returns True on success."""
@@ -287,15 +292,15 @@ def _handle_entity_deletion(
 # --- Refactored Generic Dialog Management ---
 def _manage_generic_dialog(
     entity_type: str,
-    repo: SQLModelRepository,
-    form_fields_config: dict,
+    repo: SQLModelRepository[Any],
+    form_fields_config: dict[str, dict[str, Any]],
     title_singular: str,
     # This now takes a dictionary of actual repo instances needed for deletion
-    related_repos: Optional[Dict[str, SQLModelRepository]] = None,
+    related_repos: Optional[dict[str, SQLModelRepository[Any]]] = None,
     parent_id_field_name: Optional[str] = None,
     parent_id_value: Optional[Any] = None
 ):
-    data = {field: config.get('default', '') for field, config in form_fields_config.items() if isinstance(config, dict)}
+    data: dict[str, Any] = {field: config.get('default', '') for field, config in form_fields_config.items() if isinstance(config, dict)}
     dialog_mode = "new"
     editing_id_key = f'editing_{entity_type}_id'
     show_dialog_key = f'show_manage_{entity_type}_dialog'
@@ -401,19 +406,19 @@ def _manage_generic_dialog(
 # For the purpose of this step, we'll define them as None and the dialogs might not fully work
 # until the main app.py refactoring passes them correctly or they are imported.
 
-bidding_repo: Optional[SQLModelRepository] = None
-item_repo: Optional[SQLModelRepository] = None
-supplier_repo: Optional[SQLModelRepository] = None
-competitor_repo: Optional[SQLModelRepository] = None
-quote_repo: Optional[SQLModelRepository] = None
-bid_repo: Optional[SQLModelRepository] = None
+bidding_repo: Optional[SQLModelRepository[Bidding]] = None
+item_repo: Optional[SQLModelRepository[Item]] = None
+supplier_repo: Optional[SQLModelRepository[Supplier]] = None
+competitor_repo: Optional[SQLModelRepository[Competitor]] = None
+quote_repo: Optional[SQLModelRepository[Quote]] = None
+bid_repo: Optional[SQLModelRepository[Bid]] = None
 
 # The user of these functions will need to set these repository variables,
 # perhaps through a setup function or by importing them from where they are initialized.
 def set_dialog_repositories(
-    b_repo: SQLModelRepository, i_repo: SQLModelRepository,
-    s_repo: SQLModelRepository, c_repo: SQLModelRepository,
-    q_repo: SQLModelRepository, bi_repo: SQLModelRepository
+    b_repo: SQLModelRepository[Bidding], i_repo: SQLModelRepository[Item],
+    s_repo: SQLModelRepository[Supplier], c_repo: SQLModelRepository[Competitor],
+    q_repo: SQLModelRepository[Quote], bi_repo: SQLModelRepository[Bid]
 ):
     global bidding_repo, item_repo, supplier_repo, competitor_repo, quote_repo, bid_repo
     bidding_repo = b_repo
