@@ -1,16 +1,17 @@
-from typing import List, Dict, Tuple, Any, Optional # For type hinting
+from typing import Any # For type hinting # Removed Optional, List, Dict, Tuple
 
 # --- Funções Auxiliares para Selectbox ---
-def get_options_map(data_list: list, name_col: str = 'name', extra_cols: Optional[list[str]] = None, default_message:str = "Selecione...") -> tuple[dict[Any, str], list[Any]]:
+def get_options_map(data_list: list[Any], name_col: str = 'name', extra_cols: list[str] | None = None, default_message:str = "Selecione...") -> tuple[dict[int | str | None, str], list[int | str | None]]:
     if not data_list:
+        # Ensure the structure matches the return type hint even for default case
         return {None: default_message}, [None]
 
-    options_map: dict[Any, str] = {None: default_message}
-    ids_list: list[Any] = [None] # Changed List to list for consistency
+    options_map: dict[int | str | None, str] = {None: default_message}
+    ids_list: list[int | str | None] = [None]
 
     for row in data_list:
-        row_id = getattr(row, 'id', None) # Ensure row has id
-        if row_id is None: # Skip if no id
+        row_id: int | str | None = getattr(row, 'id', None) # Ensure row_id is typed for clarity
+        if row_id is None:
             continue
 
         display_name_parts = []
@@ -19,27 +20,28 @@ def get_options_map(data_list: list, name_col: str = 'name', extra_cols: Optiona
                 for col in extra_cols:
                     if hasattr(row, col):
                         display_name_parts.append(str(getattr(row, col)))
-                    else: # Add a placeholder if an expected extra_col is missing
+                    else:
                         display_name_parts.append(f"[{col}?]")
 
-                # Construct display name from parts
+                current_display_name = "" # Renamed to avoid conflict with outer scope if any
                 if len(display_name_parts) >= 2:
-                    display_name = f"{display_name_parts[0]} - {display_name_parts[1]}"
+                    current_display_name = f"{display_name_parts[0]} - {display_name_parts[1]}"
                     if len(display_name_parts) > 2:
-                         display_name += f" ({display_name_parts[2]})"
+                         current_display_name += f" ({display_name_parts[2]})"
                 elif len(display_name_parts) == 1:
-                    display_name = display_name_parts[0]
-                else: # Fallback if no extra_cols were actually processed
-                    display_name = str(row_id)
+                    current_display_name = display_name_parts[0]
+                else:
+                    current_display_name = str(row_id)
 
-            except AttributeError: # Fallback in case of unexpected error
-                display_name = str(row_id)
+                options_map[row_id] = current_display_name
+
+            except AttributeError:
+                options_map[row_id] = str(row_id)
         elif hasattr(row, name_col):
-            display_name = str(getattr(row, name_col))
+            options_map[row_id] = str(getattr(row, name_col))
         else:
-            display_name = str(row_id) # Fallback if name_col attribute is missing
+            options_map[row_id] = str(row_id)
 
-        options_map[row_id] = display_name
         ids_list.append(row_id)
 
     return options_map, ids_list

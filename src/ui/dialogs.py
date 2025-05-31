@@ -1,7 +1,8 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, time, date # Ensure date is also imported
-from typing import Any, Dict, Optional, Callable
+from typing import Any, TypedDict, Literal, Union # Added TypedDict, Literal, Union
+from collections.abc import Callable
 
 # Assuming repository instances are defined in app.py or a similar accessible module
 # This will likely need adjustment in a later step to avoid circular dependencies
@@ -15,8 +16,45 @@ from typing import Any, Dict, Optional, Callable
 from repository import SQLModelRepository # This is a generic type, not an instance
 from db.models import BiddingMode, Bidding, Item, Supplier, Competitor, Quote, Bid # Added import
 
+# --- Type Aliases for Form Configuration ---
+class FormFieldConfigBase(TypedDict, total=False):
+    label: str
+    required: bool
+    default: Any
+
+class TextFieldConfig(FormFieldConfigBase):
+    type: Literal["text_input", "text_area"]
+
+class NumberFieldConfig(FormFieldConfigBase):
+    type: Literal["number_input"]
+    min_value: float | int
+    step: float | int
+    format: str
+
+class SelectFieldConfig(FormFieldConfigBase):
+    type: Literal["selectbox"]
+    options: list[Any]
+    format_func: Callable[[Any], str]
+
+class DateFieldConfig(FormFieldConfigBase):
+    type: Literal["date_input"]
+
+class TimeFieldConfig(FormFieldConfigBase):
+    type: Literal["time_input"]
+
+FormFieldConfig = Union[
+    TextFieldConfig,
+    NumberFieldConfig,
+    SelectFieldConfig,
+    DateFieldConfig,
+    TimeFieldConfig,
+]
+
+FormConfig = dict[str, FormFieldConfig]
+
+
 # --- Definições de Configuração dos Formulários ---
-bidding_form_config: dict[str, dict[str, Any]] = {
+bidding_form_config: FormConfig = {
     'process_number': {'label': 'Nº do Processo*', 'type': 'text_input', 'required': True},
     'city': {'label': 'Cidade*', 'type': 'text_input', 'required': True},
     'mode': {
@@ -24,19 +62,19 @@ bidding_form_config: dict[str, dict[str, Any]] = {
         'type': 'selectbox',
         'options': list(BiddingMode),
         'required': True,
-        'default': BiddingMode.PE, # Default to BiddingMode.PE enum member
-        'format_func': lambda mode: mode.value # Format function to display enum value
+        'default': BiddingMode.PE,
+        'format_func': lambda mode: mode.value
     },
     'session_date': {'label': 'Data da Sessão (Opcional)', 'type': 'date_input', 'default': None},
     'session_time': {'label': 'Hora da Sessão (Opcional)', 'type': 'time_input', 'default': None}
 }
-item_form_config: dict[str, dict[str, Any]] = {
+item_form_config: FormConfig = {
     'name': {'label': 'Nome do Item*', 'type': 'text_input', 'required': True},
     'description': {'label': 'Descrição', 'type': 'text_area', 'default': ''},
-    'quantity': {'label': 'Quantidade*', 'type': 'number_input', 'min_value': 1.0, 'default': 1.0, 'required': True, 'step': 1.0},
+    'quantity': {'label': 'Quantidade*', 'type': 'number_input', 'min_value': 1.0, 'default': 1.0, 'required': True, 'step': 1.0, 'format': "%.2f"}, # Added format for consistency
     'unit': {'label': 'Unidade*', 'type': 'text_input', 'default': 'UN', 'required': True}
 }
-contact_entity_form_config: dict[str, dict[str, Any]] = {
+contact_entity_form_config: FormConfig = {
     'name': {'label': 'Nome*', 'type': 'text_input', 'required': True},
     'website': {'label': 'Website', 'type': 'text_input', 'default': ''},
     'email': {'label': 'Email', 'type': 'text_input', 'default': ''},
@@ -47,29 +85,34 @@ contact_entity_form_config: dict[str, dict[str, Any]] = {
 # --- Helper Functions for _manage_generic_dialog ---
 
 def _render_form_fields(
-    form_fields_config: dict[str, dict[str, Any]],
+    form_fields_config: FormConfig,
     current_data: dict[str, Any]
 ) -> dict[str, Any]:
     """Renders form fields based on configuration and current data."""
     form_data_submitted: dict[str, Any] = {}
     for field, config in form_fields_config.items():
-        if not isinstance(config, dict):
-            continue
-        field_label = config.get('label', field.replace('_', ' ').title())
-        current_field_value = current_data.get(field, config.get('default', ''))
+        # Since FormFieldConfig is a Union, config will be one of the TypedDicts
+        # All TypedDicts here inherit 'label' and 'default' (optional) from FormFieldConfigBase
+        # However, direct access like config.get('label') is problematic for Unions if keys are not common to all members in a way type checker understands
+        # For this step, we'll keep it as is, but a more robust way would be to check config['type'] first.
 
-        if config['type'] == 'text_input':
+        field_label = config.get('label', field.replace('_', ' ').title()) # type: ignore
+        current_field_value = current_data.get(field, config.get('default')) # type: ignore
+
+        field_type = config['type']
+
+        if field_type == 'text_input':
             form_data_submitted[field] = st.text_input(field_label, value=current_field_value)
-        elif config['type'] == 'selectbox':
-            options = config.get('options', [])
-            format_function = config.get('format_func', lambda x: x) # Get format_func from config
+        elif field_type == 'selectbox':
+            # Now config can be asserted or checked to be SelectFieldConfig if needed for more specific keys
+            options = config.get('options', []) # type: ignore
+            format_function = config.get('format_func', lambda x: x) # type: ignore
             try:
-                # current_field_value should be an enum member if editing, or the default enum member
                 index = options.index(current_field_value) if current_field_value in options else 0
             except ValueError:
                 index = 0
             form_data_submitted[field] = st.selectbox(field_label, options=options, index=index, format_func=format_function)
-        elif config['type'] == 'date_input':
+        elif field_type == 'date_input':
             val = current_field_value
             if pd.isna(val) or val is None:
                 val = None
@@ -77,10 +120,9 @@ def _render_form_fields(
                 val = pd.to_datetime(val, errors='coerce').date()
             elif isinstance(val, datetime):
                 val = val.date()
-            # Ensure val is a date object or None for st.date_input
             val = val if isinstance(val, date) else None
             form_data_submitted[field] = st.date_input(field_label, value=val)
-        elif config['type'] == 'time_input':
+        elif field_type == 'time_input':
             val = current_field_value
             if pd.isna(val) or val is None:
                 val = None
@@ -89,19 +131,18 @@ def _render_form_fields(
                     val = datetime.strptime(val, '%H:%M:%S').time()
                 except ValueError:
                     val = None
-            # Ensure val is a time object or None for st.time_input
             if isinstance(val, time):
                 form_data_submitted[field] = st.time_input(field_label, value=val)
             else:
-                form_data_submitted[field] = st.time_input(field_label, value=None) # Ensure None if not a time object
-        elif config['type'] == 'text_area':
+                form_data_submitted[field] = st.time_input(field_label, value=None)
+        elif field_type == 'text_area':
             form_data_submitted[field] = st.text_area(field_label, value=current_field_value)
-        elif config['type'] == 'number_input':
+        elif field_type == 'number_input':
             form_data_submitted[field] = st.number_input(
                 field_label, value=current_field_value,
-                min_value=config.get('min_value'),
-                step=config.get('step', 1),
-                format=config.get('format')
+                min_value=config.get('min_value'), # type: ignore
+                step=config.get('step', 1), # type: ignore
+                format=config.get('format') # type: ignore
             )
     return form_data_submitted
 
@@ -109,16 +150,15 @@ def _save_entity_data(
     entity_type: str,
     repo: SQLModelRepository[Any],
     form_data_submitted: dict[str, Any],
-    form_fields_config: dict[str, dict[str, Any]],
+    form_fields_config: FormConfig, # Updated type
     dialog_mode: str,
     editing_id: Any = None,
-    parent_id_field_name: Optional[str] = None,
-    parent_id_value: Optional[Any] = None
+    parent_id_field_name: str | None = None,
+    parent_id_value: Any | None = None
 ) -> bool:
-    """Saves entity data (create or update). Returns True on success."""
     is_valid = all(
-        not (config.get('required') and not form_data_submitted.get(field) and form_data_submitted.get(field) != 0)
-        for field, config in form_fields_config.items() if isinstance(config, dict)
+        not (config.get('required') and not form_data_submitted.get(field) and form_data_submitted.get(field) != 0) # type: ignore
+        for field, config in form_fields_config.items()
     )
     if not is_valid:
         st.error("Por favor, preencha todos os campos obrigatórios (*).")
@@ -138,9 +178,8 @@ def _save_entity_data(
         else:
             save_data["date"] = None
 
-    for field, config in form_fields_config.items():
-        if not isinstance(config, dict):
-            continue
+    for field, config_untyped in form_fields_config.items():
+        config = config_untyped # Already FormFieldConfig, but for clarity if we need to check type
         if config['type'] == 'date_input' and isinstance(save_data.get(field), str):
             save_data[field] = pd.to_datetime(save_data[field], errors='coerce').date() if save_data.get(field) else None
         elif config['type'] == 'time_input' and isinstance(save_data.get(field), str):
@@ -152,11 +191,15 @@ def _save_entity_data(
             else:
                 save_data[field] = None
 
-    title_singular = form_fields_config.get("_title_singular", entity_type.capitalize())
+    # title_singular is passed as a parameter to _manage_generic_dialog, which then passes it to _handle_entity_deletion.
+    # _save_entity_data gets title_singular from _manage_generic_dialog's form_fields_config if it was put there,
+    # or capitalizes entity_type. Since we removed setting it in _manage_generic_dialog, it will use capitalize.
+    # For consistency and to avoid potential type issues if it *was* in the config as non-str:
+    _title_singular_from_config = form_fields_config.get("_title_singular") # This key is not part of FormFieldConfig
+    title_singular_display = str(_title_singular_from_config) if _title_singular_from_config else entity_type.capitalize()
 
-    # Convert empty strings to None for specific optional fields before saving
+
     if entity_type in ["supplier", "competitor"]:
-        # "description" from form_fields_config maps to "desc" in save_data at this point
         fields_to_nullify_if_empty = ["website", "email", "phone", "desc"]
         for field_name in fields_to_nullify_if_empty:
             if field_name in save_data and save_data[field_name] == "":
@@ -171,45 +214,42 @@ def _save_entity_data(
             if 'id' in save_data:
                 del save_data['id']
 
-            new_entity_model = repo.model(**save_data)
+            new_entity_model = repo.model_class(**save_data)
             created_entity = repo.add(new_entity_model)
             display_name = getattr(created_entity, 'name', getattr(created_entity, 'process_number', ''))
-            st.success(f"{title_singular} '{display_name}' (ID: {created_entity.id}) criado(a) com sucesso!")
-            return True # Moved into new block
+            st.success(f"{title_singular_display} '{display_name}' (ID: {created_entity.id}) criado(a) com sucesso!")
+            return True
         else:  # dialog_mode == "edit"
             if editing_id is None:
-                st.error(f"ID de edição não fornecido para {title_singular}.")
+                st.error(f"ID de edição não fornecido para {title_singular_display}.")
                 return False
             save_data['updated_at'] = current_time
             updated_entity = repo.update(editing_id, save_data)
             if updated_entity:
                 display_name = getattr(updated_entity, 'name', getattr(updated_entity, 'process_number', ''))
-                st.success(f"{title_singular} '{display_name}' (ID: {updated_entity.id}) atualizado(a) com sucesso!")
-                return True # Moved here
+                st.success(f"{title_singular_display} '{display_name}' (ID: {updated_entity.id}) atualizado(a) com sucesso!")
+                return True
             else:
-                st.error(f"Falha ao atualizar {title_singular.lower()} (ID: {editing_id}). Item não encontrado ou erro na atualização.")
-                return False # Added this
+                st.error(f"Falha ao atualizar {str(title_singular_display).lower()} (ID: {editing_id}). Item não encontrado ou erro na atualização.")
+                return False
     except Exception as e:
-        st.error(f"Erro ao salvar {title_singular}: {e}")
+        st.error(f"Erro ao salvar {str(title_singular_display)}: {e}")
         return False
 
 def _handle_entity_deletion(
     entity_type: str,
     repo: SQLModelRepository[Any],
     editing_id: Any,
-    entity_data: dict[str, Any], # To get name for display
-    related_entities_to_delete_config: Optional[dict[str, SQLModelRepository[Any]]], # e.g. {"items": item_repo, "quotes": quote_repo}
+    entity_data: dict[str, Any],
+    related_entities_to_delete_config: dict[str, SQLModelRepository[Any]] | None,
     title_singular: str
 ) -> bool:
-    """Handles entity deletion including related entities. Returns True on success."""
-    # Make sure all necessary repos are passed in related_entities_to_delete_config
-    item_repo = related_entities_to_delete_config.get('item_repo')
-    quote_repo = related_entities_to_delete_config.get('quote_repo')
-    bid_repo = related_entities_to_delete_config.get('bid_repo')
+    item_repo_local = related_entities_to_delete_config.get('item_repo') if related_entities_to_delete_config else None
+    quote_repo_local = related_entities_to_delete_config.get('quote_repo') if related_entities_to_delete_config else None
+    bid_repo_local = related_entities_to_delete_config.get('bid_repo') if related_entities_to_delete_config else None
 
     entity_name_display = entity_data.get('name', entity_data.get('process_number', ''))
 
-    # Construct warning message dynamically based on what's being deleted
     related_entity_names = []
     if entity_type == 'bidding':
         related_entity_names = ["itens", "orçamentos dos itens", "lances dos itens"]
@@ -220,7 +260,7 @@ def _handle_entity_deletion(
     elif entity_type == 'competitor':
         related_entity_names = ["lances"]
 
-    warning_message = f"Tem certeza que deseja deletar {title_singular.lower()} '{entity_name_display}'?"
+    warning_message = f"Tem certeza que deseja deletar {str(title_singular).lower()} '{entity_name_display}'?"
     if related_entity_names:
         warning_message += f" Todas as {', '.join(related_entity_names)} associadas também serão deletadas. Esta ação não pode ser desfeita."
 
@@ -230,48 +270,43 @@ def _handle_entity_deletion(
     if confirm_cols_del[0].button("🔴 Confirmar Exclusão", type="primary", key=f"confirm_del_btn_{entity_type}", use_container_width=True):
         try:
             if entity_type == 'bidding':
-                if item_repo and quote_repo and bid_repo:
-                    all_items_from_repo = item_repo.get_all() or []
+                if item_repo_local and quote_repo_local and bid_repo_local:
+                    all_items_from_repo = item_repo_local.get_all() or []
                     items_to_delete = [item for item in all_items_from_repo if item.bidding_id == editing_id]
                     for item_del in items_to_delete:
-                        all_quotes_from_repo = quote_repo.get_all() or []
+                        all_quotes_from_repo = quote_repo_local.get_all() or []
                         quotes_to_delete_for_item = [q for q in all_quotes_from_repo if q.item_id == item_del.id]
                         for quote_del in quotes_to_delete_for_item:
-                            quote_repo.delete(quote_del.id)
-
-                        all_bids_from_repo = bid_repo.get_all() or []
+                            quote_repo_local.delete(quote_del.id)
+                        all_bids_from_repo = bid_repo_local.get_all() or []
                         bids_to_delete_for_item = [b for b in all_bids_from_repo if b.item_id == item_del.id]
                         for bid_del in bids_to_delete_for_item:
-                            bid_repo.delete(bid_del.id)
-                        item_repo.delete(item_del.id)
+                            bid_repo_local.delete(bid_del.id)
+                        item_repo_local.delete(item_del.id)
             elif entity_type == 'item':
-                if quote_repo and bid_repo:
-                    all_quotes_from_repo = quote_repo.get_all() or []
+                if quote_repo_local and bid_repo_local:
+                    all_quotes_from_repo = quote_repo_local.get_all() or []
                     quotes_to_delete = [q for q in all_quotes_from_repo if q.item_id == editing_id]
                     for quote_del in quotes_to_delete:
-                        quote_repo.delete(quote_del.id)
-
-                    all_bids_from_repo = bid_repo.get_all() or []
+                        quote_repo_local.delete(quote_del.id)
+                    all_bids_from_repo = bid_repo_local.get_all() or []
                     bids_to_delete = [b for b in all_bids_from_repo if b.item_id == editing_id]
                     for bid_del in bids_to_delete:
-                        bid_repo.delete(bid_del.id)
+                        bid_repo_local.delete(bid_del.id)
             elif entity_type == 'supplier':
-                if quote_repo:
-                    all_quotes_from_repo = quote_repo.get_all() or []
+                if quote_repo_local:
+                    all_quotes_from_repo = quote_repo_local.get_all() or []
                     quotes_to_delete = [q for q in all_quotes_from_repo if q.supplier_id == editing_id]
                     for quote_del in quotes_to_delete:
-                        quote_repo.delete(quote_del.id)
+                        quote_repo_local.delete(quote_del.id)
             elif entity_type == 'competitor':
-                if bid_repo:
-                    all_bids_from_repo = bid_repo.get_all() or []
+                if bid_repo_local:
+                    all_bids_from_repo = bid_repo_local.get_all() or []
                     bids_to_delete = [b for b in all_bids_from_repo if b.competitor_id == editing_id]
                     for bid_del in bids_to_delete:
-                        bid_repo.delete(bid_del.id)
-
+                        bid_repo_local.delete(bid_del.id)
             repo.delete(editing_id)
-            st.success(f"{title_singular} '{entity_name_display}' e suas dependências foram deletados(as) com sucesso.")
-
-            # Update session state for selections
+            st.success(f"{str(title_singular)} '{entity_name_display}' e suas dependências foram deletados(as) com sucesso.")
             if st.session_state.get(f'selected_{entity_type}_id') == editing_id:
                 st.session_state[f'selected_{entity_type}_id'] = None
             if entity_type == 'bidding':
@@ -279,34 +314,29 @@ def _handle_entity_deletion(
                 st.session_state.selected_item_id = None
             if entity_type == 'item' and st.session_state.selected_item_id == editing_id:
                 st.session_state.selected_item_id = None
-
-            return True  # Deletion successful
+            return True
         except Exception as e:
-            st.error(f"Erro ao deletar {title_singular} e/ou suas dependências: {e}")
-            return False  # Deletion failed
+            st.error(f"Erro ao deletar {str(title_singular)} e/ou suas dependências: {e}")
+            return False
     if confirm_cols_del[1].button("Cancelar", key=f"cancel_del_btn_{entity_type}", use_container_width=True):
         st.session_state[f'confirm_delete_{entity_type}'] = False
-        st.rerun()  # Rerun to clear confirmation
-    return False  # Deletion not confirmed or failed
+        st.rerun()
+    return False
 
-# --- Refactored Generic Dialog Management ---
 def _manage_generic_dialog(
     entity_type: str,
     repo: SQLModelRepository[Any],
-    form_fields_config: dict[str, dict[str, Any]],
+    form_fields_config: FormConfig, # Updated Type
     title_singular: str,
-    # This now takes a dictionary of actual repo instances needed for deletion
-    related_repos: Optional[dict[str, SQLModelRepository[Any]]] = None,
-    parent_id_field_name: Optional[str] = None,
-    parent_id_value: Optional[Any] = None
+    related_repos: dict[str, SQLModelRepository[Any]] | None = None,
+    parent_id_field_name: str | None = None,
+    parent_id_value: Any | None = None
 ):
-    data: dict[str, Any] = {field: config.get('default', '') for field, config in form_fields_config.items() if isinstance(config, dict)}
+    data: dict[str, Any] = {field: config.get('default') for field, config in form_fields_config.items()} # type: ignore
     dialog_mode = "new"
     editing_id_key = f'editing_{entity_type}_id'
     show_dialog_key = f'show_manage_{entity_type}_dialog'
     confirm_delete_key = f'confirm_delete_{entity_type}'
-
-    form_fields_config["_title_singular"] = title_singular # Pass to save helper
 
     if st.session_state[editing_id_key] is not None:
         try:
@@ -317,22 +347,21 @@ def _manage_generic_dialog(
                 st.session_state[editing_id_key] = None
                 st.rerun()
                 return
-
-            for field_key, config_val in form_fields_config.items():
-                if isinstance(config_val, dict):
-                    model_attr = "desc" if field_key == "description" and entity_type in ["item", "supplier", "competitor"] else field_key
-                    if entity_type == "bidding" and field_key == "session_date":
-                        data[field_key] = entity_to_edit.date.date() if hasattr(entity_to_edit, "date") and entity_to_edit.date else config_val.get('default')
-                        continue
-                    elif entity_type == "bidding" and field_key == "session_time":
-                        data[field_key] = entity_to_edit.date.time() if hasattr(entity_to_edit, "date") and entity_to_edit.date else config_val.get('default')
-                        continue
-                    if hasattr(entity_to_edit, model_attr):
-                        data[field_key] = getattr(entity_to_edit, model_attr)
-                    elif 'default' in config_val:
-                        data[field_key] = config_val['default']
-                    else:
-                        data[field_key] = ''
+            for field_key, config_val_untyped in form_fields_config.items():
+                config_val = config_val_untyped # Already FormFieldConfig
+                model_attr = "desc" if field_key == "description" and entity_type in ["item", "supplier", "competitor"] else field_key
+                if entity_type == "bidding" and field_key == "session_date":
+                    data[field_key] = entity_to_edit.date.date() if hasattr(entity_to_edit, "date") and entity_to_edit.date else config_val.get('default')
+                    continue
+                elif entity_type == "bidding" and field_key == "session_time":
+                    data[field_key] = entity_to_edit.date.time() if hasattr(entity_to_edit, "date") and entity_to_edit.date else config_val.get('default')
+                    continue
+                if hasattr(entity_to_edit, model_attr):
+                    data[field_key] = getattr(entity_to_edit, model_attr)
+                elif 'default' in config_val: # Check if default is actually in this specific config type
+                    data[field_key] = config_val['default']
+                else:
+                    data[field_key] = '' # Or some other appropriate default
             data['id'] = entity_to_edit.id
             dialog_mode = "edit"
         except Exception as e:
@@ -346,7 +375,6 @@ def _manage_generic_dialog(
 
     with st.form(key=f"{entity_type}_form"):
         submitted_form_data = _render_form_fields(form_fields_config, data)
-
         form_action_cols = st.columns(2)
         with form_action_cols[0]:
             save_button_label = f"💾 Salvar {title_singular}" if dialog_mode == "new" else f"💾 Atualizar {title_singular}"
@@ -355,16 +383,15 @@ def _manage_generic_dialog(
                     st.session_state[show_dialog_key] = False
                     st.session_state[editing_id_key] = None
                     st.rerun()
-                else:  # Save failed, keep dialog open
+                else:
                     st.session_state[show_dialog_key] = True
                     st.rerun()
-
 
         if dialog_mode == "edit":
             with form_action_cols[1]:
                 if st.form_submit_button(f"🗑️ Deletar {title_singular}", type="secondary", use_container_width=True):
                     st.session_state[confirm_delete_key] = True
-                    st.rerun()  # Rerun to show confirmation dialog part
+                    st.rerun()
 
     if st.session_state.get(confirm_delete_key, False):
         if _handle_entity_deletion(entity_type, repo, st.session_state[editing_id_key], data, related_repos or {}, title_singular):
@@ -372,49 +399,26 @@ def _manage_generic_dialog(
             st.session_state[editing_id_key] = None
             st.session_state[confirm_delete_key] = False
             st.rerun()
-        else:  # Deletion failed or cancelled, keep dialog open if not cancelled by button
-            if not st.session_state.get(f"cancel_del_btn_{entity_type}_clicked", False):  # Poor man's check, might need better state handling
-                 st.session_state[show_dialog_key] = True # Keep dialog open if not cancelled by button click
-            st.session_state.pop(f"cancel_del_btn_{entity_type}_clicked", None)  # clean up
-            # If _handle_entity_deletion returned False because of an error or cancellation,
-            # the dialog should remain open or close based on the action in _handle_entity_deletion.
-            # A rerun here ensures the state is consistent if _handle_entity_deletion didn't already call it.
-            # This part may need further refinement based on the exact return conditions of _handle_entity_deletion.
-                st.rerun()
+        else:
+            if not st.session_state.get(f"cancel_del_btn_{entity_type}_clicked", False):
+                 st.session_state[show_dialog_key] = True
+            st.session_state.pop(f"cancel_del_btn_{entity_type}_clicked", None)
+            st.rerun()
 
-    # This button should be at the same level as the st.form and st.subheader calls
     if st.button("Fechar Diálogo", key=f"close_dialog_btn_{entity_type}", use_container_width=True):
         st.session_state[show_dialog_key] = False
         st.session_state[editing_id_key] = None
         st.session_state[confirm_delete_key] = False
         st.rerun()
 
-
 # --- Funções Wrapper para Diálogos Específicos ---
-# These wrappers will need access to the actual repository instances.
-# For now, they are commented out or will raise errors until repositories are correctly imported/passed.
-# This will be addressed when app.py and service/repository instantiation is refactored.
+bidding_repo: SQLModelRepository[Bidding] | None = None
+item_repo: SQLModelRepository[Item] | None = None
+supplier_repo: SQLModelRepository[Supplier] | None = None
+competitor_repo: SQLModelRepository[Competitor] | None = None
+quote_repo: SQLModelRepository[Quote] | None = None
+bid_repo: SQLModelRepository[Bid] | None = None
 
-# To make this runnable for now, we'll assume these repos are globally available or passed.
-# This is a temporary measure for this step.
-# from app import bidding_repo, item_repo, supplier_repo, competitor_repo, quote_repo, bid_repo # Circular import
-# For now, these wrappers won't work correctly without the repos.
-# The goal of this step is to move the code structure.
-
-# --- Placeholder for repository instances ---
-# These would ideally be imported from a central location (e.g., services.py or db.database.py)
-# For the purpose of this step, we'll define them as None and the dialogs might not fully work
-# until the main app.py refactoring passes them correctly or they are imported.
-
-bidding_repo: Optional[SQLModelRepository[Bidding]] = None
-item_repo: Optional[SQLModelRepository[Item]] = None
-supplier_repo: Optional[SQLModelRepository[Supplier]] = None
-competitor_repo: Optional[SQLModelRepository[Competitor]] = None
-quote_repo: Optional[SQLModelRepository[Quote]] = None
-bid_repo: Optional[SQLModelRepository[Bid]] = None
-
-# The user of these functions will need to set these repository variables,
-# perhaps through a setup function or by importing them from where they are initialized.
 def set_dialog_repositories(
     b_repo: SQLModelRepository[Bidding], i_repo: SQLModelRepository[Item],
     s_repo: SQLModelRepository[Supplier], c_repo: SQLModelRepository[Competitor],
@@ -430,7 +434,7 @@ def set_dialog_repositories(
 
 @st.dialog("Gerenciar Licitação", width="large")
 def manage_bidding_dialog_wrapper():
-    if not bidding_repo or not item_repo or not quote_repo or not bid_repo:  # Check if repos are set
+    if not bidding_repo or not item_repo or not quote_repo or not bid_repo:
         st.error("Repositórios não configurados para o diálogo de licitação.")
         return
     _manage_generic_dialog(
@@ -484,102 +488,6 @@ def manage_competitor_dialog_wrapper():
         'competitor', competitor_repo, contact_entity_form_config, "Concorrente",
         related_repos={"bid_repo": bid_repo}
     )
-
-# Example of how repositories might be set from app.py after they are initialized:
-# from ui import dialogs
-# dialogs.set_dialog_repositories(bidding_repo, item_repo, supplier_repo, competitor_repo, quote_repo, bid_repo)
-# This setup call would need to happen once before any dialog is invoked.
-# This also implies that the ui.dialogs module is imported in app.py.
-# The actual repo instances (bidding_repo, etc.) would come from db.database.py or similar.
-# This will be handled in the app.py refactoring step.
-# For now, this file can be created, but the dialogs won't be fully functional.
-# The crucial part is that the function signatures and internal logic are moved.
-# The dependency injection for repositories will be finalized in the next step.
-
-# --- Placeholder for repository instances ---
-# These would ideally be imported from a central location (e.g., services.py or db.database.py)
-# For the purpose of this step, we'll define them as None and the dialogs might not fully work
-# until the main app.py refactoring passes them correctly or they are imported.
-
-bidding_repo: SQLModelRepository = None
-item_repo: SQLModelRepository = None
-supplier_repo: SQLModelRepository = None
-competitor_repo: SQLModelRepository = None
-quote_repo: SQLModelRepository = None
-bid_repo: SQLModelRepository = None
-
-# The user of these functions will need to set these repository variables,
-# perhaps through a setup function or by importing them from where they are initialized.
-def set_dialog_repositories(
-    b_repo: SQLModelRepository, i_repo: SQLModelRepository,
-    s_repo: SQLModelRepository, c_repo: SQLModelRepository,
-    q_repo: SQLModelRepository, bi_repo: SQLModelRepository
-):
-    global bidding_repo, item_repo, supplier_repo, competitor_repo, quote_repo, bid_repo
-    bidding_repo = b_repo
-    item_repo = i_repo
-    supplier_repo = s_repo
-    competitor_repo = c_repo
-    quote_repo = q_repo
-    bid_repo = bi_repo
-
-@st.dialog("Gerenciar Licitação", width="large")
-def manage_bidding_dialog_wrapper():
-    if not bidding_repo or not item_repo or not quote_repo or not bid_repo:  # Check if repos are set
-        st.error("Repositórios não configurados para o diálogo de licitação.")
-        return
-    _manage_generic_dialog(
-        'bidding', bidding_repo, bidding_form_config, "Licitação",
-        related_repos={"item_repo": item_repo, "quote_repo": quote_repo, "bid_repo": bid_repo}
-    )
-
-@st.dialog("Gerenciar Item da Licitação", width="large")
-def manage_item_dialog_wrapper():
-    if not item_repo or not bidding_repo or not quote_repo or not bid_repo:
-        st.error("Repositórios não configurados para o diálogo de item.")
-        return
-
-    parent_bidding_id = st.session_state.get('parent_bidding_id_for_item_dialog')
-    if parent_bidding_id is None:
-        st.error("Licitação pai não definida.")
-        st.session_state.show_manage_item_dialog = False
-        st.rerun()
-        return
-
-    parent_bidding = bidding_repo.get(parent_bidding_id)
-    if not parent_bidding:
-        st.error("Licitação pai não encontrada.")
-        st.session_state.show_manage_item_dialog = False
-        st.rerun()
-        return
-    st.info(f"Para Licitação: {parent_bidding.process_number} - {parent_bidding.city}")
-
-    _manage_generic_dialog(
-        'item', item_repo, item_form_config, "Item",
-        related_repos={"quote_repo": quote_repo, "bid_repo": bid_repo},
-        parent_id_field_name='bidding_id', parent_id_value=parent_bidding_id
-    )
-
-@st.dialog("Gerenciar Fornecedor", width="large")
-def manage_supplier_dialog_wrapper():
-    if not supplier_repo or not quote_repo:
-        st.error("Repositórios não configurados para o diálogo de fornecedor.")
-        return
-    _manage_generic_dialog(
-        'supplier', supplier_repo, contact_entity_form_config, "Fornecedor",
-        related_repos={"quote_repo": quote_repo}
-    )
-
-@st.dialog("Gerenciar Concorrente", width="large")
-def manage_competitor_dialog_wrapper():
-    if not competitor_repo or not bid_repo:
-        st.error("Repositórios não configurados para o diálogo de concorrente.")
-        return
-    _manage_generic_dialog(
-        'competitor', competitor_repo, contact_entity_form_config, "Concorrente",
-        related_repos={"bid_repo": bid_repo}
-    )
-
 # Example of how repositories might be set from app.py after they are initialized:
 # from ui import dialogs
 # dialogs.set_dialog_repositories(bidding_repo, item_repo, supplier_repo, competitor_repo, quote_repo, bid_repo)

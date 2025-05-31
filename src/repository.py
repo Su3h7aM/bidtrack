@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import override, TypeVar, Generic, Type, Optional, Any, List
+from typing import override, TypeVar, Generic, Type, Any # Removed Optional and List
 from sqlalchemy import Engine
 from sqlmodel import SQLModel, create_engine, Session, select
 
@@ -11,15 +11,15 @@ class Repository(ABC, Generic[ModelT]): # Made base Repository also use ModelT f
         raise NotImplementedError
 
     @abstractmethod
-    def get(self, id: int) -> Optional[ModelT]:
+    def get(self, id: int) -> ModelT | None:
         raise NotImplementedError
 
     @abstractmethod
-    def get_all(self) -> Optional[List[ModelT]]: # Adjusted to Optional[List[ModelT]]
+    def get_all(self) -> list[ModelT] | None: # Adjusted to Optional[List[ModelT]]
         raise NotImplementedError
 
     @abstractmethod
-    def update(self, item_id: int, item_data: dict[str, Any]) -> Optional[ModelT]:
+    def update(self, item_id: int, item_data: dict[str, Any]) -> ModelT | None:
         raise NotImplementedError
 
     @abstractmethod
@@ -52,17 +52,17 @@ class SQLModelRepository(Repository[ModelT], Generic[ModelT]):
         return item
 
     @override
-    def get(self, id: int) -> Optional[ModelT]: # Changed T | None to Optional[ModelT]
+    def get(self, id: int) -> ModelT | None: # Changed T | None to Optional[ModelT]
         return self.session.get(self.model_class, id)
 
     @override
-    def get_all(self) -> Optional[List[ModelT]]: # Changed list[T] | None to Optional[List[ModelT]]
+    def get_all(self) -> list[ModelT] | None: # Changed list[T] | None to Optional[List[ModelT]]
         statement = select(self.model_class)
         all_items = self.session.exec(statement).all()
         return list(all_items) if all_items is not None else None # Ensure None is returned if query result is None
 
     @override
-    def update(self, item_id: int, item_data: dict[str, Any]) -> Optional[ModelT]: # Changed T | None to Optional[ModelT]
+    def update(self, item_id: int, item_data: dict[str, Any]) -> ModelT | None: # Changed T | None to Optional[ModelT]
         current_session = self.session
         db_item = current_session.get(self.model_class, item_id)
         if db_item:
