@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, time, date # Ensure date is also imported
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 # Assuming repository instances are defined in app.py or a similar accessible module
 # This will likely need adjustment in a later step to avoid circular dependencies
@@ -204,7 +204,7 @@ def _handle_entity_deletion(
     st.warning(warning_message)
     confirm_cols_del = st.columns(2)
 
-    if confirm_cols_del[0].button(f"🔴 Confirmar Exclusão", type="primary", key=f"confirm_del_btn_{entity_type}", use_container_width=True):
+    if confirm_cols_del[0].button("🔴 Confirmar Exclusão", type="primary", key=f"confirm_del_btn_{entity_type}", use_container_width=True):
         try:
             if entity_type == 'bidding':
                 if item_repo and quote_repo and bid_repo:
@@ -338,7 +338,7 @@ def _manage_generic_dialog(
             st.rerun()
 
 
-    if st.button(f"Fechar Diálogo", key=f"close_dialog_btn_{entity_type}", use_container_width=True):
+    if st.button("Fechar Diálogo", key=f"close_dialog_btn_{entity_type}", use_container_width=True):
         st.session_state[show_dialog_key] = False; st.session_state[editing_id_key] = None; st.session_state[confirm_delete_key] = False; st.rerun()
 
 

@@ -1,4 +1,3 @@
-import pandas as pd # Added as it might be used by a function that uses this
 from typing import List, Dict, Tuple, Any # For type hinting
 
 # --- Funções Auxiliares para Selectbox ---

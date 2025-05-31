@@ -1,10 +1,7 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
-from datetime import datetime, date, time
 
-from db.models import Bidding, Item, Supplier, Competitor, Quote, Bid, BiddingMode # Added BiddingMode as it's used by Bidding
+from db.models import Bidding, Item, Supplier, Competitor, Quote, Bid # Added BiddingMode as it's used by Bidding
 from repository import SQLModelRepository
 
 # --- Database Repository Instances ---
@@ -219,7 +216,7 @@ if st.session_state.selected_item_id is not None:
                 with table_cols_display[1]:
                     st.markdown("##### Lances Recebidos")
                     if not bids_for_item_df_display.empty:
-                        bids_to_show = bids_for_item_df_display.copy(); 
+                        bids_to_show = bids_for_item_df_display.copy() 
                         if 'created_at' in bids_to_show.columns: # Check for created_at now
                             bids_to_show['created_at'] = pd.to_datetime(bids_to_show['created_at']).dt.strftime('%Y-%m-%d %H:%M:%S')
                         if 'update_at' in bids_to_show.columns and pd.notnull(bids_to_show['update_at']).all(): # ensure not all are NaT/None
@@ -242,12 +239,12 @@ if st.session_state.selected_item_id is not None:
                     else: st.caption("Gráfico de lances não disponível.")
             else:
                 if st.session_state.selected_item_id is not None:
-                    st.warning("Item selecionado não é válido para a licitação atual ou foi removido.");
+                    st.warning("Item selecionado não é válido para a licitação atual ou foi removido.")
                     # Não reseta aqui para permitir que o selectbox tente se corrigir no próximo rerun
     except IndexError:
         st.warning("Ocorreu um erro ao tentar exibir os detalhes do item.")
         if st.session_state.selected_item_id is not None:
-            st.session_state.selected_item_id = None; st.session_state.selected_item_name_for_display = None;
+            st.session_state.selected_item_id = None; st.session_state.selected_item_name_for_display = None
 
 # Abrir diálogos de gerenciamento de Fornecedores/Concorrentes se flags estiverem ativas
 if st.session_state.get('show_manage_supplier_dialog', False): manage_supplier_dialog_wrapper()

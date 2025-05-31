@@ -2,7 +2,6 @@ from abc import ABC, abstractmethod
 from typing import override
 from sqlalchemy import Engine
 from sqlmodel import SQLModel, create_engine, Session, select
-from db.models import Quote, Supplier
 
 
 class Repository[T](ABC):
