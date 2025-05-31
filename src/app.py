@@ -218,9 +218,9 @@ if st.session_state.selected_item_id is not None:
                     # Add formatting for date columns
                     if not quotes_for_item_df_display.empty: # Check if DataFrame is not empty before formatting
                         if 'created_at' in quotes_for_item_df_display.columns:
-                            quotes_for_item_df_display['created_at'] = pd.to_datetime(quotes_for_item_df_display['created_at']).dt.strftime('%Y-%m-%d %H:%M:%S')
+                            quotes_for_item_df_display['created_at'] = pd.to_datetime(quotes_for_item_df_display['created_at'].astype(str), errors='coerce').dt.strftime('%Y-%m-%d %H:%M:%S')
                         if 'update_at' in quotes_for_item_df_display.columns and pd.notnull(quotes_for_item_df_display['update_at']).all():
-                            quotes_for_item_df_display['update_at'] = pd.to_datetime(quotes_for_item_df_display['update_at']).dt.strftime('%Y-%m-%d %H:%M:%S')
+                            quotes_for_item_df_display['update_at'] = pd.to_datetime(quotes_for_item_df_display['update_at'].astype(str), errors='coerce').dt.strftime('%Y-%m-%d %H:%M:%S')
 
                     if not quotes_for_item_df_display.empty:
                         st.dataframe(quotes_for_item_df_display[['supplier_name', 'price', 'created_at', 'update_at', 'notes']], hide_index=True, use_container_width=True)
@@ -231,9 +231,9 @@ if st.session_state.selected_item_id is not None:
                     if not bids_for_item_df_display.empty:
                         bids_to_show = bids_for_item_df_display.copy() 
                         if 'created_at' in bids_to_show.columns: # Check for created_at now
-                            bids_to_show['created_at'] = pd.to_datetime(bids_to_show['created_at']).dt.strftime('%Y-%m-%d %H:%M:%S')
+                            bids_to_show['created_at'] = pd.to_datetime(bids_to_show['created_at'].astype(str), errors='coerce').dt.strftime('%Y-%m-%d %H:%M:%S')
                         if 'update_at' in bids_to_show.columns and pd.notnull(bids_to_show['update_at']).all(): # ensure not all are NaT/None
-                            bids_to_show['update_at'] = pd.to_datetime(bids_to_show['update_at']).dt.strftime('%Y-%m-%d %H:%M:%S')
+                            bids_to_show['update_at'] = pd.to_datetime(bids_to_show['update_at'].astype(str), errors='coerce').dt.strftime('%Y-%m-%d %H:%M:%S')
                         # The model has 'updated_at'. If 'update_at' is truly intended for display,
                         # it must be present in bids_to_show DataFrame.
                         # Let's assume 'update_at' is a specific column name in the DataFrame for display purposes.

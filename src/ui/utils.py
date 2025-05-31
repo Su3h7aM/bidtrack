@@ -10,7 +10,8 @@ def get_options_map(data_list: List, name_col: str = 'name', extra_cols: List[st
 
     for row in data_list:
         row_id = getattr(row, 'id', None) # Ensure row has id
-        if row_id is None: continue # Skip if no id
+        if row_id is None: # Skip if no id
+            continue
 
         display_name_parts = []
         if extra_cols:

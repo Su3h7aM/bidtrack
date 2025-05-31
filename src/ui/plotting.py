@@ -1,6 +1,7 @@
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+from typing import Optional
 
 # --- Funções Auxiliares para Gráficos ---
 def create_quotes_figure(quotes_df_display: pd.DataFrame) -> go.Figure:
@@ -8,7 +9,7 @@ def create_quotes_figure(quotes_df_display: pd.DataFrame) -> go.Figure:
     fig.update_layout(xaxis_title="Fornecedor", yaxis_title="Preço (R$)", legend_title_text='Fornecedores', dragmode='pan', showlegend=False) # Added showlegend=False
     return fig
 
-def create_bids_figure(bids_df_display: pd.DataFrame, min_quote_price: float = None) -> go.Figure:
+def create_bids_figure(bids_df_display: pd.DataFrame, min_quote_price: Optional[float] = None) -> go.Figure:
     if 'created_at' in bids_df_display.columns and not bids_df_display['created_at'].isnull().all():
         b_df_sorted = bids_df_display.sort_values(by='created_at') if len(bids_df_display) > 1 else bids_df_display
         fig = px.line(b_df_sorted, x='created_at', y='price', color='competitor_name', title="Evolução dos Lances ao Longo do Tempo", labels={'created_at': 'Momento do Lance', 'price': 'Preço do Lance (R$)', 'competitor_name': 'Concorrente'}, markers=True)

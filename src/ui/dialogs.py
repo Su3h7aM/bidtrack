@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, time, date # Ensure date is also imported
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 # Assuming repository instances are defined in app.py or a similar accessible module
 # This will likely need adjustment in a later step to avoid circular dependencies
@@ -112,8 +112,8 @@ def _save_entity_data(
     form_fields_config: Dict[str, Dict[str, Any]],
     dialog_mode: str,
     editing_id: Any = None,
-    parent_id_field_name: str = None,
-    parent_id_value: Any = None
+    parent_id_field_name: Optional[str] = None,
+    parent_id_value: Optional[Any] = None
 ) -> bool:
     """Saves entity data (create or update). Returns True on success."""
     is_valid = all(
@@ -291,9 +291,9 @@ def _manage_generic_dialog(
     form_fields_config: dict,
     title_singular: str,
     # This now takes a dictionary of actual repo instances needed for deletion
-    related_repos: Dict[str, SQLModelRepository] = None,
-    parent_id_field_name: str = None,
-    parent_id_value: any = None
+    related_repos: Optional[Dict[str, SQLModelRepository]] = None,
+    parent_id_field_name: Optional[str] = None,
+    parent_id_value: Optional[Any] = None
 ):
     data = {field: config.get('default', '') for field, config in form_fields_config.items() if isinstance(config, dict)}
     dialog_mode = "new"
@@ -375,9 +375,9 @@ def _manage_generic_dialog(
             # the dialog should remain open or close based on the action in _handle_entity_deletion.
             # A rerun here ensures the state is consistent if _handle_entity_deletion didn't already call it.
             # This part may need further refinement based on the exact return conditions of _handle_entity_deletion.
-            st.rerun()
+                st.rerun()
 
-
+    # This button should be at the same level as the st.form and st.subheader calls
     if st.button("Fechar Diálogo", key=f"close_dialog_btn_{entity_type}", use_container_width=True):
         st.session_state[show_dialog_key] = False
         st.session_state[editing_id_key] = None
@@ -401,12 +401,12 @@ def _manage_generic_dialog(
 # For the purpose of this step, we'll define them as None and the dialogs might not fully work
 # until the main app.py refactoring passes them correctly or they are imported.
 
-bidding_repo: SQLModelRepository = None
-item_repo: SQLModelRepository = None
-supplier_repo: SQLModelRepository = None
-competitor_repo: SQLModelRepository = None
-quote_repo: SQLModelRepository = None
-bid_repo: SQLModelRepository = None
+bidding_repo: Optional[SQLModelRepository] = None
+item_repo: Optional[SQLModelRepository] = None
+supplier_repo: Optional[SQLModelRepository] = None
+competitor_repo: Optional[SQLModelRepository] = None
+quote_repo: Optional[SQLModelRepository] = None
+bid_repo: Optional[SQLModelRepository] = None
 
 # The user of these functions will need to set these repository variables,
 # perhaps through a setup function or by importing them from where they are initialized.
@@ -490,28 +490,6 @@ def manage_competitor_dialog_wrapper():
 # For now, this file can be created, but the dialogs won't be fully functional.
 # The crucial part is that the function signatures and internal logic are moved.
 # The dependency injection for repositories will be finalized in the next step.
-            # If it returned False because cancel was clicked, rerun would have happened inside _handle_entity_deletion.
-            # This part might need refinement based on exact flow of _handle_entity_deletion's False returns.
-            st.rerun()
-
-
-    if st.button("Fechar Diálogo", key=f"close_dialog_btn_{entity_type}", use_container_width=True):
-        st.session_state[show_dialog_key] = False
-        st.session_state[editing_id_key] = None
-        st.session_state[confirm_delete_key] = False
-        st.rerun()
-
-
-# --- Funções Wrapper para Diálogos Específicos ---
-# These wrappers will need access to the actual repository instances.
-# For now, they are commented out or will raise errors until repositories are correctly imported/passed.
-# This will be addressed when app.py and service/repository instantiation is refactored.
-
-# To make this runnable for now, we'll assume these repos are globally available or passed.
-# This is a temporary measure for this step.
-# from app import bidding_repo, item_repo, supplier_repo, competitor_repo, quote_repo, bid_repo # Circular import
-# For now, these wrappers won't work correctly without the repos.
-# The goal of this step is to move the code structure.
 
 # --- Placeholder for repository instances ---
 # These would ideally be imported from a central location (e.g., services.py or db.database.py)
