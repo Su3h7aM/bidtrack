@@ -13,12 +13,20 @@ from typing import Any, Dict, List
 # For the purpose of this step, we assume these can be imported.
 # If not, they would need to be passed as arguments.
 from repository import SQLModelRepository # This is a generic type, not an instance
+from db.models import BiddingMode # Added import
 
 # --- Definições de Configuração dos Formulários ---
 bidding_form_config = {
     'process_number': {'label': 'Nº do Processo*', 'type': 'text_input', 'required': True},
     'city': {'label': 'Cidade*', 'type': 'text_input', 'required': True},
-    'mode': {'label': 'Modalidade*', 'type': 'selectbox', 'options': ["Pregão Eletrônico", "Pregão Presencial", "Tomada de Preços", "Concorrência Pública", "Convite", "Leilão"], 'required': True, 'default': "Pregão Eletrônico"},
+    'mode': {
+        'label': 'Modalidade*',
+        'type': 'selectbox',
+        'options': list(BiddingMode),
+        'required': True,
+        'default': BiddingMode.PE, # Default to BiddingMode.PE enum member
+        'format_func': lambda mode: mode.value # Format function to display enum value
+    },
     'session_date': {'label': 'Data da Sessão (Opcional)', 'type': 'date_input', 'default': None},
     'session_time': {'label': 'Hora da Sessão (Opcional)', 'type': 'time_input', 'default': None}
 }
@@ -53,11 +61,13 @@ def _render_form_fields(
             form_data_submitted[field] = st.text_input(field_label, value=current_field_value)
         elif config['type'] == 'selectbox':
             options = config.get('options', [])
-            try: # Ensure value is valid for index
+            format_function = config.get('format_func', lambda x: x) # Get format_func from config
+            try:
+                # current_field_value should be an enum member if editing, or the default enum member
                 index = options.index(current_field_value) if current_field_value in options else 0
             except ValueError:
-                index = 0 # Default to first option if value is not in options
-            form_data_submitted[field] = st.selectbox(field_label, options=options, index=index)
+                index = 0
+            form_data_submitted[field] = st.selectbox(field_label, options=options, index=index, format_func=format_function)
         elif config['type'] == 'date_input':
             val = current_field_value
             if pd.isna(val) or val is None: val = None
