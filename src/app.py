@@ -25,7 +25,12 @@ APP_TITLE = "📊 Sistema Integrado de Licitações"
 from state import initialize_session_state
 initialize_session_state()
 
+# Initialize current_view if not already in session state
+if 'current_view' not in st.session_state:
+    st.session_state.current_view = "Detalhes da Licitação/Item"
+
 # --- Imports from UI module ---
+from ui.views import render_licitacoes_tab, render_itens_tab, render_orcamentos_tab, render_lances_tab # Visualização Geral
 from ui.plotting import create_quotes_figure, create_bids_figure
 from ui.utils import get_options_map
 from ui.dialogs import (
@@ -48,8 +53,21 @@ set_dialog_repositories(
 st.set_page_config(layout="wide", page_title=APP_TITLE)
 st.title(APP_TITLE)
 
-# --- Seleção de Licitação e Botão de Gerenciamento ---
-col_bid_select, col_bid_manage_btn = st.columns([5, 2], vertical_alignment="bottom")
+# --- View Selection ---
+view_options = ["Detalhes da Licitação/Item", "Visualização Geral"]
+current_view_index = view_options.index(st.session_state.current_view)
+st.session_state.current_view = st.radio(
+    "Selecione a Visualização:",
+    options=view_options,
+    index=current_view_index,
+    horizontal=True,
+    key="radio_current_view"
+)
+
+# --- Conditional Display based on View Selection ---
+if st.session_state.current_view == "Detalhes da Licitação/Item":
+    # --- Seleção de Licitação e Botão de Gerenciamento ---
+    col_bid_select, col_bid_manage_btn = st.columns([5, 2], vertical_alignment="bottom")
 all_biddings = bidding_repo.get_all()
 if all_biddings is None: all_biddings = []
 bidding_options_map, bidding_option_ids = get_options_map(data_list=all_biddings, extra_cols=['process_number', 'city', 'mode'], default_message=DEFAULT_BIDDING_SELECT_MESSAGE)
@@ -246,6 +264,23 @@ if st.session_state.selected_item_id is not None:
         if st.session_state.selected_item_id is not None:
             st.session_state.selected_item_id = None; st.session_state.selected_item_name_for_display = None
 
+elif st.session_state.current_view == "Visualização Geral":
+    st.subheader("Visão Agregada dos Dados") # Changed title to subheader for better aesthetics with tabs
+
+    tab_titles = ["Licitações", "Itens de Licitação", "Orçamentos", "Lances"]
+    tab1, tab2, tab3, tab4 = st.tabs(tab_titles)
+
+    with tab1:
+        render_licitacoes_tab(bidding_repo)
+    with tab2:
+        render_itens_tab(item_repo, bidding_repo)
+    with tab3:
+        render_orcamentos_tab(quote_repo, item_repo, supplier_repo)
+    with tab4:
+        render_lances_tab(bid_repo, item_repo, competitor_repo)
+
 # Abrir diálogos de gerenciamento de Fornecedores/Concorrentes se flags estiverem ativas
+# Estes dialogos podem ser chamados de dentro da view "Detalhes da Licitação/Item"
+# e precisam ser processados no final do script run.
 if st.session_state.get('show_manage_supplier_dialog', False): manage_supplier_dialog_wrapper()
 if st.session_state.get('show_manage_competitor_dialog', False): manage_competitor_dialog_wrapper()
