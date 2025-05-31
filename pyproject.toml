@@ -15,4 +15,7 @@ dependencies = [
 dev = [
     "pandas-stubs>=2.2.3.250527",
     "plotly-stubs>=0.0.5",
+    "pyrefly>=0.17.1",
+    "ruff>=0.11.12",
+    "ty>=0.0.1a7",
 ]
