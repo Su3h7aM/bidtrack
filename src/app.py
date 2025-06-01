@@ -3,7 +3,7 @@ import pandas as pd
 
 from db.models import Bidding, Item, Supplier, Competitor, Quote, Bid # Added BiddingMode as it's used by Bidding
 from repository import SQLModelRepository
-from data_processing import get_quotes_dataframe, get_bids_dataframe
+from services.dataframes import get_quotes_dataframe, get_bids_dataframe
 
 # --- Database Repository Instances ---
 db_url = "sqlite:///data/bidtrack.db" # Define the database URL
@@ -27,7 +27,7 @@ from state import initialize_session_state
 initialize_session_state()
 
 # --- Imports from UI module ---
-from ui.plotting import create_quotes_figure, create_bids_figure
+from services.plotting import create_quotes_figure, create_bids_figure
 from ui.utils import get_options_map
 from ui.dialogs import (
     manage_bidding_dialog_wrapper,
