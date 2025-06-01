@@ -3,6 +3,7 @@ import pandas as pd
 
 from db.models import Bidding, Item, Supplier, Competitor, Quote, Bid # Added BiddingMode as it's used by Bidding
 from repository import SQLModelRepository
+from data_processing import get_quotes_dataframe, get_bids_dataframe
 
 # --- Database Repository Instances ---
 db_url = "sqlite:///data/bidtrack.db" # Define the database URL
@@ -189,51 +190,42 @@ if st.session_state.selected_item_id is not None:
                 if all_bids is None: all_bids = []
                 bids_for_item_list = [b for b in all_bids if b.item_id == st.session_state.selected_item_id]
 
-                quotes_for_item_df_display = pd.DataFrame([q.model_dump() for q in quotes_for_item_list])
-                bids_for_item_df_display = pd.DataFrame([b.model_dump() for b in bids_for_item_list])
+                # Use the new data processing functions
+                all_suppliers = supplier_repo.get_all() # Ensure all_suppliers is defined
+                if all_suppliers is None: all_suppliers = []
+                all_competitors = competitor_repo.get_all() # Ensure all_competitors is defined
+                if all_competitors is None: all_competitors = []
 
-                if not quotes_for_item_df_display.empty and all_suppliers:
-                    supplier_map = {s.id: s.name for s in all_suppliers}
-                    quotes_for_item_df_display['supplier_name'] = quotes_for_item_df_display['supplier_id'].map(supplier_map)
-
-                if not bids_for_item_df_display.empty and all_competitors:
-                    competitor_map = {c.id: c.name for c in all_competitors}
-                    bids_for_item_df_display['competitor_name'] = bids_for_item_df_display['competitor_id'].map(competitor_map)
-
+                quotes_for_item_df_display = get_quotes_dataframe(quotes_for_item_list, all_suppliers)
+                bids_for_item_df_display = get_bids_dataframe(bids_for_item_list, all_competitors)
 
                 table_cols_display = st.columns(2) 
                 with table_cols_display[0]:
                     st.markdown("##### Orçamentos Recebidos")
-                    # Add formatting for date columns
-                    if not quotes_for_item_df_display.empty: # Check if DataFrame is not empty before formatting
-                        if 'created_at' in quotes_for_item_df_display.columns:
-                            quotes_for_item_df_display['created_at'] = pd.to_datetime(quotes_for_item_df_display['created_at']).dt.strftime('%Y-%m-%d %H:%M:%S')
-                        if 'update_at' in quotes_for_item_df_display.columns and pd.notnull(quotes_for_item_df_display['update_at']).all():
-                            quotes_for_item_df_display['update_at'] = pd.to_datetime(quotes_for_item_df_display['update_at']).dt.strftime('%Y-%m-%d %H:%M:%S')
-
-                    if not quotes_for_item_df_display.empty: st.dataframe(quotes_for_item_df_display[['supplier_name', 'price', 'created_at', 'update_at', 'notes']], hide_index=True, use_container_width=True)
+                    if not quotes_for_item_df_display.empty:
+                        # Columns to display, matching those returned by get_quotes_dataframe
+                        display_cols_quotes = ['supplier_name', 'price', 'margin', 'created_at', 'update_at', 'notes']
+                        # Filter for existing columns to prevent KeyErrors if some are missing
+                        final_display_cols_quotes = [col for col in display_cols_quotes if col in quotes_for_item_df_display.columns]
+                        st.dataframe(quotes_for_item_df_display[final_display_cols_quotes], hide_index=True, use_container_width=True)
                     else: st.info("Nenhum orçamento cadastrado para este item.")
                 with table_cols_display[1]:
                     st.markdown("##### Lances Recebidos")
                     if not bids_for_item_df_display.empty:
-                        bids_to_show = bids_for_item_df_display.copy() 
-                        if 'created_at' in bids_to_show.columns: # Check for created_at now
-                            bids_to_show['created_at'] = pd.to_datetime(bids_to_show['created_at']).dt.strftime('%Y-%m-%d %H:%M:%S')
-                        if 'update_at' in bids_to_show.columns and pd.notnull(bids_to_show['update_at']).all(): # ensure not all are NaT/None
-                            bids_to_show['update_at'] = pd.to_datetime(bids_to_show['update_at']).dt.strftime('%Y-%m-%d %H:%M:%S')
-                        # The model has 'updated_at'. If 'update_at' is truly intended for display,
-                        # it must be present in bids_to_show DataFrame.
-                        # Let's assume 'update_at' is a specific column name in the DataFrame for display purposes.
-                        st.dataframe(bids_to_show[['competitor_name', 'price', 'created_at', 'notes', 'update_at']], hide_index=True, use_container_width=True)
+                        # Columns to display, matching those returned by get_bids_dataframe
+                        display_cols_bids = ['competitor_name', 'price', 'created_at', 'notes', 'update_at']
+                        # Filter for existing columns
+                        final_display_cols_bids = [col for col in display_cols_bids if col in bids_for_item_df_display.columns]
+                        st.dataframe(bids_for_item_df_display[final_display_cols_bids], hide_index=True, use_container_width=True)
                     else: st.info("Nenhum lance cadastrado para este item.")
 
                 st.markdown("---"); st.subheader("Gráficos do Item")
                 graph_cols_display = st.columns(2)
                 with graph_cols_display[0]:
-                    if not quotes_for_item_df_display.empty: st.plotly_chart(create_quotes_figure(quotes_for_item_df_display), use_container_width=True)
+                    if not quotes_for_item_df_display.empty and 'price' in quotes_for_item_df_display.columns and 'supplier_name' in quotes_for_item_df_display.columns : st.plotly_chart(create_quotes_figure(quotes_for_item_df_display), use_container_width=True)
                     else: st.caption("Gráfico de orçamentos não disponível.")
                 with graph_cols_display[1]:
-                    if not bids_for_item_df_display.empty and 'price' in bids_for_item_df_display.columns:
+                    if not bids_for_item_df_display.empty and 'price' in bids_for_item_df_display.columns and 'competitor_name' in bids_for_item_df_display.columns:
                         min_quote_price_val = quotes_for_item_df_display['price'].min() if not quotes_for_item_df_display.empty and 'price' in quotes_for_item_df_display.columns else None
                         st.plotly_chart(create_bids_figure(bids_for_item_df_display, min_quote_price_val), use_container_width=True)
                     else: st.caption("Gráfico de lances não disponível.")
