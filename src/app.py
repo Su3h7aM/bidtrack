@@ -154,7 +154,10 @@ if selected_bidding_id_from_sb != st.session_state.selected_bidding_id:
     # Não é necessário st.rerun() aqui, o Streamlit reexecuta ao mudar o valor do selectbox
 
 if st.session_state.show_manage_bidding_dialog:
-    manage_bidding_dialog_wrapper()
+    is_open = manage_bidding_dialog_wrapper()
+    if not is_open:
+        st.session_state.show_manage_bidding_dialog = False
+        st.rerun() # Add rerun for immediate effect
 
 # --- Seleção de Item e Botão de Gerenciamento ---
 items_for_select = []
@@ -208,7 +211,10 @@ if st.session_state.selected_bidding_id is not None:
 
 if st.session_state.show_manage_item_dialog:
     if st.session_state.parent_bidding_id_for_item_dialog is not None:
-        manage_item_dialog_wrapper()
+        is_open = manage_item_dialog_wrapper()
+        if not is_open:
+            st.session_state.show_manage_item_dialog = False
+            st.rerun() # Add rerun
     else:
         st.session_state.show_manage_item_dialog = False
 
@@ -587,6 +593,12 @@ if st.session_state.selected_item_id is not None:
 
 # Abrir diálogos de gerenciamento de Fornecedores/Concorrentes se flags estiverem ativas
 if st.session_state.get("show_manage_supplier_dialog", False):
-    manage_supplier_dialog_wrapper()
+    is_open = manage_supplier_dialog_wrapper()
+    if not is_open:
+        st.session_state.show_manage_supplier_dialog = False
+        st.rerun() # Add rerun
 if st.session_state.get("show_manage_bidder_dialog", False): # Renamed state variable
-    manage_bidder_dialog_wrapper() # Renamed function call
+    is_open = manage_bidder_dialog_wrapper() # Renamed function call
+    if not is_open:
+        st.session_state.show_manage_bidder_dialog = False
+        st.rerun() # Add rerun
