@@ -68,24 +68,31 @@ def get_quotes_dataframe(
     
     # Select and reorder columns for consistency
     display_columns = [
-        "supplier_name",
-        "price", # Base Product Cost
+        "supplier_name", # Derived
+        "price", # Original: price (model) -> price (df)
         "freight",
         "additional_costs",
-        "taxes", # Input tax %
-        "margin", # Input margin %
-        "calculated_price", # The new calculated selling price
-        "created_at",
-        "update_at",
+        "taxes",
+        "margin",
+        "calculated_price", # Derived
+        "created_at", # Original: created_at (model) -> created_at (df)
+        "update_at",  # Original: update_at (model) -> update_at (df)
         "notes",
         "id",
         "item_id",
-        "supplier_id",
+        "supplier_id", # Original: supplier_id (model) -> supplier_id (df)
     ]
     # Filter out columns not present in quotes_df to avoid KeyError
     # (e.g. if a quote_list was empty and columns were predefined differently)
-    final_columns = [col for col in display_columns if col in quotes_df.columns]
-    quotes_df = quotes_df[final_columns]
+    
+    # Ensure all display_columns exist, adding them with pd.NA if not
+    for col_name in display_columns:
+        if col_name not in quotes_df.columns:
+            quotes_df[col_name] = pd.NA
+
+    # Ensure the DataFrame has all display_columns in the correct order
+    # and filters out any columns not in display_columns
+    quotes_df = quotes_df.reindex(columns=display_columns)
 
     return quotes_df
 
@@ -105,7 +112,7 @@ def get_bids_dataframe(
     """
     if not bids_list:
         return pd.DataFrame(
-            columns=["bidder_name", "price", "created_at", "notes", "update_at"] # Renamed column
+            columns=["bidder_name", "price", "created_at", "notes", "update_at"]
         )
 
     bids_df = pd.DataFrame([b.model_dump() for b in bids_list])
@@ -116,7 +123,7 @@ def get_bids_dataframe(
             bidder_map = {b.id: b.name for b in bidders_list}
             if "bidder_id" in bids_df.columns:
                 bids_df["bidder_name"] = bids_df["bidder_id"].map(bidder_map)
-                bids_df["bidder_name"].fillna("N/D", inplace=True)
+                bids_df["bidder_name"] = bids_df["bidder_name"].fillna("N/D")
             else:
                 # If bidder_id column does not exist, fill bidder_name with "N/D"
                 bids_df["bidder_name"] = "N/D"
@@ -143,18 +150,25 @@ def get_bids_dataframe(
     # Select and reorder columns for consistency
     # Note: 'bidding_id' is also part of Bid model, include if needed for other purposes
     display_columns = [
-        "bidder_name", # Renamed column
+        "bidder_name", # Derived
         "price",
         "created_at",
-        "notes",
         "update_at",
+        "notes",
         "id",
         "item_id",
-        "bidding_id",
-        "bidder_id", # Renamed column
+        "bidding_id", # Original: bidding_id (model) -> bidding_id (df)
+        "bidder_id",  # Original: bidder_id (model) -> bidder_id (df)
     ]
     # Filter out columns not present in bids_df to avoid KeyError
-    final_columns = [col for col in display_columns if col in bids_df.columns]
-    bids_df = bids_df[final_columns]
+
+    # Ensure all display_columns exist, adding them with pd.NA if not
+    for col_name in display_columns:
+        if col_name not in bids_df.columns:
+            bids_df[col_name] = pd.NA
+
+    # Ensure the DataFrame has all display_columns in the correct order
+    # and filters out any columns not in display_columns
+    bids_df = bids_df.reindex(columns=display_columns)
 
     return bids_df
