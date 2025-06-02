@@ -8,15 +8,15 @@ def create_quotes_figure(quotes_df_display: pd.DataFrame) -> go.Figure:
     fig = px.bar(
         quotes_df_display,
         x="supplier_name",
-        y="price",
-        title="Comparativo de Preços dos Orçamentos",
-        labels={"supplier_name": "Fornecedor", "price": "Preço (R$)"},
+        y="calculated_price", # Changed from "price"
+        title="Comparativo de Preços de Venda dos Orçamentos", # Updated title
+        labels={"supplier_name": "Fornecedor", "calculated_price": "Preço de Venda Calculado (R$)"}, # Updated label
         color="supplier_name",
         text_auto=True,
     )
     fig.update_layout(
         xaxis_title="Fornecedor",
-        yaxis_title="Preço (R$)",
+        yaxis_title="Preço de Venda Calculado (R$)", # Updated label
         legend_title_text="Fornecedores",
         dragmode="pan",
         showlegend=False,

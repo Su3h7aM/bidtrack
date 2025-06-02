@@ -26,10 +26,24 @@ class Quote(SQLModel, table=True):
     item_id: int | None = Field(foreign_key="item.id", nullable=False, ondelete="CASCADE")
     supplier_id: int | None = Field(foreign_key="supplier.id", nullable=False, ondelete="CASCADE")
 
-    price: Decimal = Field(
+    price: Decimal = Field( # This is the Custo do Produto
         sa_column=Column(Numeric(precision=20, scale=5, asdecimal=True))
     )
-    margin: float
+    # New fields
+    freight: Decimal | None = Field(
+        default=Decimal("0.00"),
+        sa_column=Column(Numeric(precision=20, scale=5, asdecimal=True), nullable=True)
+    )
+    additional_costs: Decimal | None = Field(
+        default=Decimal("0.00"),
+        sa_column=Column(Numeric(precision=20, scale=5, asdecimal=True), nullable=True)
+    )
+    taxes: Decimal | None = Field( # Percentage value, e.g., 6 for 6%
+        default=Decimal("0.00"),
+        sa_column=Column(Numeric(precision=5, scale=2, asdecimal=True), nullable=True) # Max 999.99%
+    )
+
+    margin: float # This might need re-evaluation or be calculated differently now
     notes: str | None = Field(default=None)
 
 

@@ -249,13 +249,35 @@ if st.session_state.selected_item_id is not None:
                                 st.session_state.show_manage_supplier_dialog = True
                         with st.form(key="new_quote_form"):
                             quote_price = st.number_input(
-                                "Preço do Orçamento*",
+                                "Preço do Orçamento (Custo do Produto)*", # Clarified label
                                 min_value=0.01,
                                 format="%.2f",
                                 key="quote_price_input_exp",
                             )
+                            quote_freight = st.number_input( # New field
+                                "Frete (R$)",
+                                min_value=0.00,
+                                format="%.2f",
+                                key="quote_freight_input_exp",
+                                value=0.00 # Default value
+                            )
+                            quote_additional_costs = st.number_input( # New field
+                                "Custos Adicionais (R$)",
+                                min_value=0.00,
+                                format="%.2f",
+                                key="quote_additional_costs_input_exp",
+                                value=0.00 # Default value
+                            )
+                            quote_taxes = st.number_input( # New field
+                                "Impostos (%)",
+                                min_value=0.00,
+                                format="%.2f",
+                                key="quote_taxes_input_exp",
+                                help="Percentual de impostos sobre o preço de venda. Ex: 6 para 6%",
+                                value=0.00 # Default value
+                            )
                             quote_margin = st.number_input(
-                                "Margem*",
+                                "Margem de Lucro Desejada (%)*", # Clarified label and type
                                 min_value=0.0,
                                 format="%.2f",
                                 key="quote_margin_input_exp",
@@ -274,10 +296,12 @@ if st.session_state.selected_item_id is not None:
                                         new_quote_instance = Quote(
                                             item_id=st.session_state.selected_item_id, # type: ignore
                                             supplier_id=selected_supplier_id_quote, # type: ignore
-                                            price=Decimal(str(quote_price)), # Ensure price is Decimal
-                                            margin=Decimal(str(quote_margin)), # Ensure margin is Decimal
+                                            price=Decimal(str(quote_price)), # Custo do Produto
+                                            freight=Decimal(str(quote_freight)), # New
+                                            additional_costs=Decimal(str(quote_additional_costs)), # New
+                                            taxes=Decimal(str(quote_taxes)), # New
+                                            margin=Decimal(str(quote_margin)), # Will be used if calculation is client-side prior to saving, or stored as is. The issue implies margin is a target for the formula.
                                             notes=quote_notes if quote_notes else None,
-                                            # created_at and updated_at will be handled by the model itself or DB defaults
                                         )
                                         added_quote = quote_repo.add(new_quote_instance) # Direct repository call
                                         st.success(
@@ -385,10 +409,14 @@ if st.session_state.selected_item_id is not None:
                         # Columns to display, matching those returned by get_quotes_dataframe
                         display_cols_quotes = [
                             "supplier_name",
-                            "price",
+                            "price", # This is the base cost
+                            "freight",
+                            "additional_costs",
+                            "taxes",
                             "margin",
+                            "calculated_price", # The new final selling price
                             "created_at",
-                            "update_at",
+                            "update_at", 
                             "notes",
                         ]
                         # Filter for existing columns to prevent KeyErrors if some are missing
@@ -435,7 +463,8 @@ if st.session_state.selected_item_id is not None:
                 with graph_cols_display[0]:
                     if (
                         not quotes_for_item_df_display.empty
-                        and "price" in quotes_for_item_df_display.columns
+                        # Ensure 'calculated_price' is used for the main plot as well, matching create_quotes_figure
+                        and "calculated_price" in quotes_for_item_df_display.columns 
                         and "supplier_name" in quotes_for_item_df_display.columns
                     ):
                         st.plotly_chart(
@@ -450,10 +479,10 @@ if st.session_state.selected_item_id is not None:
                         and "price" in bids_for_item_df_display.columns
                         and "competitor_name" in bids_for_item_df_display.columns
                     ):
-                        min_quote_price_val = (
-                            quotes_for_item_df_display["price"].min()
+                        min_quote_price_val = ( # THIS IS THE LINE TO CHANGE
+                            quotes_for_item_df_display["calculated_price"].min() # Changed from "price"
                             if not quotes_for_item_df_display.empty
-                            and "price" in quotes_for_item_df_display.columns
+                            and "calculated_price" in quotes_for_item_df_display.columns # Ensure column exists
                             else None
                         )
                         st.plotly_chart(

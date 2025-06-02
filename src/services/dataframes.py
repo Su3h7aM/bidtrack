@@ -45,11 +45,36 @@ def get_quotes_dataframe(
         else:
             quotes_df["update_at"] = None  # Or some other placeholder like '-' or ''
 
+    # Convert to numeric, coercing errors and filling NaNs
+    # These fields are Decimal in the model, pandas usually converts them to object or float.
+    # Explicit conversion ensures they are numeric for calculations.
+    quotes_df['price'] = pd.to_numeric(quotes_df['price'], errors='coerce').fillna(0.0)
+    quotes_df['freight'] = pd.to_numeric(quotes_df['freight'], errors='coerce').fillna(0.0)
+    quotes_df['additional_costs'] = pd.to_numeric(quotes_df['additional_costs'], errors='coerce').fillna(0.0)
+    quotes_df['taxes'] = pd.to_numeric(quotes_df['taxes'], errors='coerce').fillna(0.0) # This is I (%)
+    quotes_df['margin'] = pd.to_numeric(quotes_df['margin'], errors='coerce').fillna(0.0) # This is L (%)
+
+    total_direct_cost = quotes_df['price'] + quotes_df['freight'] + quotes_df['additional_costs']
+    # Ensure taxes and margin are treated as percentages (e.g., 6 for 6%)
+    total_percentage_sum_decimal = (quotes_df['taxes'] / 100) + (quotes_df['margin'] / 100)
+    denominator = 1 - total_percentage_sum_decimal
+
+    # Initialize calculated_price column with pd.NA
+    quotes_df['calculated_price'] = pd.NA 
+
+    # Calculate only where denominator is valid ( > 0 to avoid division by zero or negative/zero price if sum_percentages >= 100%)
+    valid_denominator_mask = denominator > 0
+    quotes_df.loc[valid_denominator_mask, 'calculated_price'] = total_direct_cost[valid_denominator_mask] / denominator[valid_denominator_mask]
+    
     # Select and reorder columns for consistency
     display_columns = [
         "supplier_name",
-        "price",
-        "margin",
+        "price", # Base Product Cost
+        "freight",
+        "additional_costs",
+        "taxes", # Input tax %
+        "margin", # Input margin %
+        "calculated_price", # The new calculated selling price
         "created_at",
         "update_at",
         "notes",
@@ -58,6 +83,7 @@ def get_quotes_dataframe(
         "supplier_id",
     ]
     # Filter out columns not present in quotes_df to avoid KeyError
+    # (e.g. if a quote_list was empty and columns were predefined differently)
     final_columns = [col for col in display_columns if col in quotes_df.columns]
     quotes_df = quotes_df[final_columns]
 
