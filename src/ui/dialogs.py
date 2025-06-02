@@ -1,19 +1,27 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, time, date  # Ensure date is also imported
-from typing import Any
+from datetime import datetime, time, date
+from typing import Any, cast
 
-# Assuming repository instances are defined in app.py or a similar accessible module
-# This will likely need adjustment in a later step to avoid circular dependencies
-# For now, we'll add placeholders and assume they can be imported.
-# from app import bidding_repo, item_repo, supplier_repo, competitor_repo, quote_repo, bid_repo
-# from db.models import Quote, Bid, Bidding, Item, Supplier, Competitor # BiddingMode is not directly used here but Bidding is
+# Core services
+from services import core as core_services
 
-# Placeholder imports: these will be resolved when app.py is refactored
-# For the purpose of this step, we assume these can be imported.
-# If not, they would need to be passed as arguments.
-from repository import SQLModelRepository  # This is a generic type, not an instance
-from db.models import BiddingMode  # Added import
+# Models
+from db.models import Bidding, Item, Supplier, Competitor, Quote, Bid, BiddingMode
+
+# Repository type hint (still needed for parameters and module-level vars)
+from repository import SQLModelRepository
+
+
+# --- Module-level repository instances, to be set by set_dialog_repositories ---
+# These will be accessed by the dialog wrapper functions.
+_bidding_repo: SQLModelRepository[Bidding] | None = None
+_item_repo: SQLModelRepository[Item] | None = None
+_supplier_repo: SQLModelRepository[Supplier] | None = None
+_competitor_repo: SQLModelRepository[Competitor] | None = None
+_quote_repo: SQLModelRepository[Quote] | None = None
+_bid_repo: SQLModelRepository[Bid] | None = None
+
 
 # --- Definições de Configuração dos Formulários ---
 bidding_form_config = {
@@ -155,7 +163,12 @@ def _save_entity_data(
     parent_id_field_name: str = None,
     parent_id_value: Any = None,
 ) -> bool:
-    """Saves entity data (create or update). Returns True on success."""
+    """Saves entity data (create or update) by calling core services. Returns True on success."""
+    # Ensure the correct repository is available (it's passed as 'repo' argument)
+    if repo is None:
+        st.error("Repositório não configurado para esta operação.")
+        return False
+
     is_valid = all(
         not (
             config.get("required")
@@ -169,14 +182,15 @@ def _save_entity_data(
         st.error("Por favor, preencha todos os campos obrigatórios (*).")
         return False
 
-    current_time = datetime.now()
     save_data = {
         k: v for k, v in form_data_submitted.items() if k in form_fields_config
     }
 
+    # Handle specific field name mappings (e.g., description -> desc)
     if entity_type in ["item", "supplier", "competitor"] and "description" in save_data:
         save_data["desc"] = save_data.pop("description")
 
+    # Handle Bidding specific date/time combination
     if entity_type == "bidding":
         session_date_val = save_data.pop("session_date", None)
         session_time_val = save_data.pop("session_time", None)
@@ -185,66 +199,88 @@ def _save_entity_data(
                 session_date_val, session_time_val if session_time_val else time.min
             )
         else:
-            save_data["date"] = None
+            save_data["date"] = None # Explicitly set to None if no date
 
-    for field, config in form_fields_config.items():
-        if not isinstance(config, dict):
-            continue
-        if config["type"] == "date_input" and isinstance(save_data.get(field), str):
-            save_data[field] = (
-                pd.to_datetime(save_data[field], errors="coerce").date()
-                if save_data.get(field)
-                else None
-            )
-        elif config["type"] == "time_input" and isinstance(save_data.get(field), str):
-            try:
-                save_data[field] = (
-                    datetime.strptime(save_data[field], "%H:%M:%S").time()
-                    if save_data.get(field)
-                    else None
-                )
-            except ValueError:
-                save_data[field] = None
-
-    title_singular = form_fields_config.get("_title_singular", entity_type.capitalize())
-
-    # Convert empty strings to None for specific optional fields before saving
+    # Convert empty strings to None for specific optional fields before creating/updating model
     if entity_type in ["supplier", "competitor"]:
-        # "description" from form_fields_config maps to "desc" in save_data at this point
         fields_to_nullify_if_empty = ["website", "email", "phone", "desc"]
         for field_name in fields_to_nullify_if_empty:
             if field_name in save_data and save_data[field_name] == "":
                 save_data[field_name] = None
 
+    title_singular = form_fields_config.get("_title_singular", entity_type.capitalize())
+
     try:
+        model_instance: Any = None
         if dialog_mode == "new":
-            save_data["created_at"] = current_time
-            save_data["updated_at"] = current_time
             if parent_id_field_name and parent_id_value is not None:
                 save_data[parent_id_field_name] = parent_id_value
-            if "id" in save_data:
-                del save_data["id"]
 
-            new_entity_model = repo.model(**save_data)
-            created_entity = repo.add(new_entity_model)
-            display_name = getattr(
-                created_entity, "name", getattr(created_entity, "process_number", "")
-            )
-            st.success(
-                f"{title_singular} '{display_name}' (ID: {created_entity.id}) criado(a) com sucesso!"
-            )
+            # Create model instance based on entity type
+            if entity_type == "bidding":
+                model_instance = Bidding(**save_data)
+                # We need to cast repo to the correct type for the core service call
+                created_entity = core_services.save_bidding(cast(SQLModelRepository[Bidding], repo), model_instance)
+            elif entity_type == "item":
+                model_instance = Item(**save_data)
+                created_entity = core_services.save_item(cast(SQLModelRepository[Item], repo), model_instance)
+            elif entity_type == "supplier":
+                model_instance = Supplier(**save_data)
+                created_entity = core_services.save_supplier(cast(SQLModelRepository[Supplier], repo), model_instance)
+            elif entity_type == "competitor":
+                model_instance = Competitor(**save_data)
+                created_entity = core_services.save_competitor(cast(SQLModelRepository[Competitor], repo), model_instance)
+            else:
+                st.error(f"Tipo de entidade desconhecido: {entity_type}")
+                return False
+
+            display_name = getattr(created_entity, "name", getattr(created_entity, "process_number", str(created_entity.id)))
+            st.success(f"{title_singular} '{display_name}' (ID: {created_entity.id}) criado(a) com sucesso!")
+
         else:  # dialog_mode == "edit"
             if editing_id is None:
                 st.error(f"ID de edição não fornecido para {title_singular}.")
                 return False
-            save_data["updated_at"] = current_time
-            updated_entity = repo.update(editing_id, save_data)
-            display_name = getattr(
-                updated_entity, "name", getattr(updated_entity, "process_number", "")
-            )
-            st.success(
-                f"{title_singular} '{display_name}' (ID: {updated_entity.id}) atualizado(a) com sucesso!"
-            )
+
+            # Fetch existing entity via core service to ensure it's a valid SQLModel instance
+            current_entity: Any = None
+            if entity_type == "bidding":
+                current_entity = core_services.get_bidding_by_id(cast(SQLModelRepository[Bidding], repo), editing_id)
+            elif entity_type == "item":
+                current_entity = core_services.get_item_by_id(cast(SQLModelRepository[Item], repo), editing_id)
+            elif entity_type == "supplier":
+                current_entity = core_services.get_supplier_by_id(cast(SQLModelRepository[Supplier], repo), editing_id)
+            elif entity_type == "competitor":
+                current_entity = core_services.get_competitor_by_id(cast(SQLModelRepository[Competitor], repo), editing_id)
+
+            if not current_entity:
+                st.error(f"{title_singular} com ID {editing_id} não encontrado para atualização.")
+                return False
+
+            # Update fields on the fetched entity instance
+            for field, value in save_data.items():
+                if hasattr(current_entity, field):
+                    setattr(current_entity, field, value)
+
+            # Now call the save service with the updated model instance
+            if entity_type == "bidding":
+                updated_entity = core_services.save_bidding(cast(SQLModelRepository[Bidding], repo), current_entity)
+            elif entity_type == "item":
+                updated_entity = core_services.save_item(cast(SQLModelRepository[Item], repo), current_entity)
+            elif entity_type == "supplier":
+                updated_entity = core_services.save_supplier(cast(SQLModelRepository[Supplier], repo), current_entity)
+            elif entity_type == "competitor":
+                updated_entity = core_services.save_competitor(cast(SQLModelRepository[Competitor], repo), current_entity)
+            else: # Should not happen if type check at start is robust
+                st.error(f"Tipo de entidade desconhecido: {entity_type} durante atualização.")
+                return False
+
+            if updated_entity is None: # Should be caught by save_bidding if item not found, but as safeguard
+                st.error(f"Falha ao atualizar {title_singular} com ID {editing_id}. Entidade não encontrada após a tentativa de atualização.")
+                return False
+
+            display_name = getattr(updated_entity, "name", getattr(updated_entity, "process_number", str(updated_entity.id)))
+            st.success(f"{title_singular} '{display_name}' (ID: {updated_entity.id}) atualizado(a) com sucesso!")
         return True
     except Exception as e:
         st.error(f"Erro ao salvar {title_singular}: {e}")
@@ -253,23 +289,19 @@ def _save_entity_data(
 
 def _handle_entity_deletion(
     entity_type: str,
-    repo: SQLModelRepository,
     editing_id: Any,
     entity_data: dict[str, Any],  # To get name for display
-    related_entities_to_delete_config: dict[
-        str, SQLModelRepository
-    ],  # e.g. {"items": item_repo, "quotes": quote_repo}
+    # Repos needed by core delete functions are passed here
+    # These must align with what core_services.delete_<entity> expects
+    # For example, delete_bidding needs bidding_repo, item_repo, quote_repo, bid_repo
+    # These are now sourced from the module-level underscore prefixed variables
     title_singular: str,
 ) -> bool:
-    """Handles entity deletion including related entities. Returns True on success."""
-    # Make sure all necessary repos are passed in related_entities_to_delete_config
-    item_repo = related_entities_to_delete_config.get("item_repo")
-    quote_repo = related_entities_to_delete_config.get("quote_repo")
-    bid_repo = related_entities_to_delete_config.get("bid_repo")
+    """Handles entity deletion by calling core services. Returns True on success."""
+    global _bidding_repo, _item_repo, _supplier_repo, _competitor_repo, _quote_repo, _bid_repo
 
-    entity_name_display = entity_data.get("name", entity_data.get("process_number", ""))
+    entity_name_display = entity_data.get("name", entity_data.get("process_number", str(editing_id)))
 
-    # Construct warning message dynamically based on what's being deleted
     related_entity_names = []
     if entity_type == "bidding":
         related_entity_names = ["itens", "orçamentos dos itens", "lances dos itens"]
@@ -287,109 +319,70 @@ def _handle_entity_deletion(
     st.warning(warning_message)
     confirm_cols_del = st.columns(2)
 
-    if confirm_cols_del[0].button(
-        "🔴 Confirmar Exclusão",
-        type="primary",
-        key=f"confirm_del_btn_{entity_type}",
-        use_container_width=True,
-    ):
+    if confirm_cols_del[0].button("🔴 Confirmar Exclusão", type="primary", key=f"confirm_del_btn_{entity_type}", use_container_width=True):
         try:
+            deletion_successful = False
             if entity_type == "bidding":
-                if item_repo and quote_repo and bid_repo:
-                    all_items_from_repo = item_repo.get_all() or []
-                    items_to_delete = [
-                        item
-                        for item in all_items_from_repo
-                        if item.bidding_id == editing_id
-                    ]
-                    for item_del in items_to_delete:
-                        all_quotes_from_repo = quote_repo.get_all() or []
-                        quotes_to_delete_for_item = [
-                            q for q in all_quotes_from_repo if q.item_id == item_del.id
-                        ]
-                        for quote_del in quotes_to_delete_for_item:
-                            quote_repo.delete(quote_del.id)
-
-                        all_bids_from_repo = bid_repo.get_all() or []
-                        bids_to_delete_for_item = [
-                            b for b in all_bids_from_repo if b.item_id == item_del.id
-                        ]
-                        for bid_del in bids_to_delete_for_item:
-                            bid_repo.delete(bid_del.id)
-                        item_repo.delete(item_del.id)
+                if _bidding_repo and _item_repo and _quote_repo and _bid_repo:
+                    deletion_successful = core_services.delete_bidding(
+                        _bidding_repo, _item_repo, _quote_repo, _bid_repo, editing_id
+                    )
             elif entity_type == "item":
-                if quote_repo and bid_repo:
-                    all_quotes_from_repo = quote_repo.get_all() or []
-                    quotes_to_delete = [
-                        q for q in all_quotes_from_repo if q.item_id == editing_id
-                    ]
-                    for quote_del in quotes_to_delete:
-                        quote_repo.delete(quote_del.id)
-
-                    all_bids_from_repo = bid_repo.get_all() or []
-                    bids_to_delete = [
-                        b for b in all_bids_from_repo if b.item_id == editing_id
-                    ]
-                    for bid_del in bids_to_delete:
-                        bid_repo.delete(bid_del.id)
+                if _item_repo and _quote_repo and _bid_repo: # Item repo is the primary repo for item itself
+                    deletion_successful = core_services.delete_item(
+                        _item_repo, _quote_repo, _bid_repo, editing_id
+                    )
             elif entity_type == "supplier":
-                if quote_repo:
-                    all_quotes_from_repo = quote_repo.get_all() or []
-                    quotes_to_delete = [
-                        q for q in all_quotes_from_repo if q.supplier_id == editing_id
-                    ]
-                    for quote_del in quotes_to_delete:
-                        quote_repo.delete(quote_del.id)
+                if _supplier_repo and _quote_repo:
+                    deletion_successful = core_services.delete_supplier(
+                        _supplier_repo, _quote_repo, editing_id
+                    )
             elif entity_type == "competitor":
-                if bid_repo:
-                    all_bids_from_repo = bid_repo.get_all() or []
-                    bids_to_delete = [
-                        b for b in all_bids_from_repo if b.competitor_id == editing_id
-                    ]
-                    for bid_del in bids_to_delete:
-                        bid_repo.delete(bid_del.id)
+                if _competitor_repo and _bid_repo:
+                    deletion_successful = core_services.delete_competitor(
+                        _competitor_repo, _bid_repo, editing_id
+                    )
+            else:
+                st.error(f"Tipo de entidade desconhecido para exclusão: {entity_type}")
+                return False
 
-            repo.delete(editing_id)
-            st.success(
-                f"{title_singular} '{entity_name_display}' e suas dependências foram deletados(as) com sucesso."
-            )
+            if deletion_successful:
+                st.success(f"{title_singular} '{entity_name_display}' e suas dependências foram deletados(as) com sucesso.")
+                # Update session state for selections
+                if st.session_state.get(f"selected_{entity_type}_id") == editing_id:
+                    st.session_state[f"selected_{entity_type}_id"] = None
+                if entity_type == "bidding": # Special handling for bidding selection cascade
+                    st.session_state.selected_bidding_id = None
+                    st.session_state.selected_item_id = None
+                if entity_type == "item" and st.session_state.get("selected_item_id") == editing_id:
+                     st.session_state.selected_item_id = None
+                return True
+            else:
+                # This part might be tricky if core_services.delete_x doesn't raise error but returns False
+                st.error(f"Falha ao deletar {title_singular} '{entity_name_display}'. A operação no serviço principal não foi bem sucedida ou a entidade não foi encontrada.")
+                return False
 
-            # Update session state for selections
-            if st.session_state.get(f"selected_{entity_type}_id") == editing_id:
-                st.session_state[f"selected_{entity_type}_id"] = None
-            if entity_type == "bidding":
-                st.session_state.selected_bidding_id = None
-                st.session_state.selected_item_id = None
-            if (
-                entity_type == "item"
-                and st.session_state.selected_item_id == editing_id
-            ):
-                st.session_state.selected_item_id = None
-
-            return True  # Deletion successful
         except Exception as e:
             st.error(f"Erro ao deletar {title_singular} e/ou suas dependências: {e}")
-            return False  # Deletion failed
-    if confirm_cols_del[1].button(
-        "Cancelar", key=f"cancel_del_btn_{entity_type}", use_container_width=True
-    ):
+            return False
+
+    if confirm_cols_del[1].button("Cancelar", key=f"cancel_del_btn_{entity_type}", use_container_width=True):
         st.session_state[f"confirm_delete_{entity_type}"] = False
-        st.rerun()  # Rerun to clear confirmation
-    return False  # Deletion not confirmed or failed
+        st.rerun()
+    return False
 
 
 # --- Refactored Generic Dialog Management ---
 def _manage_generic_dialog(
     entity_type: str,
-    repo: SQLModelRepository,
-    form_fields_config: dict,
+    repo: SQLModelRepository, # This is the primary repository for the entity type being managed
+    form_fields_config: dict[str, Any],
     title_singular: str,
-    # This now takes a dictionary of actual repo instances needed for deletion
-    related_repos: dict[str, SQLModelRepository] = None,
-    parent_id_field_name: str = None,
-    parent_id_value: any = None,
+    # related_repos are no longer passed here, _handle_entity_deletion will use module-level ones
+    parent_id_field_name: str | None = None,
+    parent_id_value: Any = None,
 ):
-    data = {
+    data: dict[str, Any] = {
         field: config.get("default", "")
         for field, config in form_fields_config.items()
         if isinstance(config, dict)
@@ -399,227 +392,151 @@ def _manage_generic_dialog(
     show_dialog_key = f"show_manage_{entity_type}_dialog"
     confirm_delete_key = f"confirm_delete_{entity_type}"
 
-    form_fields_config["_title_singular"] = title_singular  # Pass to save helper
+    form_fields_config["_title_singular"] = title_singular
 
-    if st.session_state[editing_id_key] is not None:
+    editing_id = st.session_state.get(editing_id_key)
+
+    if editing_id is not None:
+        dialog_mode = "edit"
+        entity_to_edit: Any = None
         try:
-            entity_to_edit = repo.get(st.session_state[editing_id_key])
-            if not entity_to_edit:
-                st.error(
-                    f"{title_singular} não encontrado(a) para edição (ID: {st.session_state[editing_id_key]})."
-                )
-                st.session_state[show_dialog_key] = False
-                st.session_state[editing_id_key] = None
-                st.rerun()
-                return
+            # Fetch entity using core services
+            if entity_type == "bidding":
+                entity_to_edit = core_services.get_bidding_by_id(cast(SQLModelRepository[Bidding], repo), editing_id)
+            elif entity_type == "item":
+                entity_to_edit = core_services.get_item_by_id(cast(SQLModelRepository[Item], repo), editing_id)
+            elif entity_type == "supplier":
+                entity_to_edit = core_services.get_supplier_by_id(cast(SQLModelRepository[Supplier], repo), editing_id)
+            elif entity_type == "competitor":
+                entity_to_edit = core_services.get_competitor_by_id(cast(SQLModelRepository[Competitor], repo), editing_id)
+            else:
+                st.error(f"Tipo de entidade desconhecido para carregar: {entity_type}")
+                st.session_state[show_dialog_key] = False; st.rerun(); return
 
+            if not entity_to_edit:
+                st.error(f"{title_singular} não encontrado(a) para edição (ID: {editing_id}).")
+                st.session_state[show_dialog_key] = False; st.session_state[editing_id_key] = None; st.rerun(); return
+
+            # Populate 'data' dict from the fetched entity
             for field_key, config_val in form_fields_config.items():
-                if isinstance(config_val, dict):
-                    model_attr = (
-                        "desc"
-                        if field_key == "description"
-                        and entity_type in ["item", "supplier", "competitor"]
-                        else field_key
-                    )
+                if isinstance(config_val, dict): # Ensure it's a field config
+                    model_attr = "desc" if field_key == "description" and entity_type in ["item", "supplier", "competitor"] else field_key
+
                     if entity_type == "bidding" and field_key == "session_date":
-                        data[field_key] = (
-                            entity_to_edit.date.date()
-                            if hasattr(entity_to_edit, "date") and entity_to_edit.date
-                            else config_val.get("default")
-                        )
-                        continue
+                        data[field_key] = entity_to_edit.date.date() if hasattr(entity_to_edit, "date") and entity_to_edit.date else config_val.get("default")
                     elif entity_type == "bidding" and field_key == "session_time":
-                        data[field_key] = (
-                            entity_to_edit.date.time()
-                            if hasattr(entity_to_edit, "date") and entity_to_edit.date
-                            else config_val.get("default")
-                        )
-                        continue
-                    if hasattr(entity_to_edit, model_attr):
+                        data[field_key] = entity_to_edit.date.time() if hasattr(entity_to_edit, "date") and entity_to_edit.date else config_val.get("default")
+                    elif hasattr(entity_to_edit, model_attr):
                         data[field_key] = getattr(entity_to_edit, model_attr)
-                    elif "default" in config_val:
+                    elif "default" in config_val: # Fallback to default if attribute missing (should not happen with SQLModel)
                         data[field_key] = config_val["default"]
                     else:
-                        data[field_key] = ""
-            data["id"] = entity_to_edit.id
-            dialog_mode = "edit"
+                        data[field_key] = "" # Or None, depending on desired behavior for missing attrs
+            data["id"] = entity_to_edit.id # Ensure ID is part of data for display
+
         except Exception as e:
             st.error(f"Erro ao carregar {title_singular} para edição: {e}")
-            st.session_state[show_dialog_key] = False
-            st.session_state[editing_id_key] = None
-            st.rerun()
-            return
+            st.session_state[show_dialog_key] = False; st.session_state[editing_id_key] = None; st.rerun(); return
 
-    st.subheader(
-        f"{'Editar' if dialog_mode == 'edit' else 'Novo(a)'} {title_singular}"
-        + (f" (ID: {data.get('id')})" if dialog_mode == "edit" else "")
-    )
+    st.subheader(f"{'Editar' if dialog_mode == 'edit' else 'Novo(a)'} {title_singular}" + (f" (ID: {data.get('id')})" if dialog_mode == "edit" else ""))
 
     with st.form(key=f"{entity_type}_form"):
         submitted_form_data = _render_form_fields(form_fields_config, data)
-
         form_action_cols = st.columns(2)
         with form_action_cols[0]:
-            save_button_label = (
-                f"💾 Salvar {title_singular}"
-                if dialog_mode == "new"
-                else f"💾 Atualizar {title_singular}"
-            )
+            save_button_label = f"💾 Salvar {title_singular}" if dialog_mode == "new" else f"💾 Atualizar {title_singular}"
             if st.form_submit_button(save_button_label, use_container_width=True):
-                if _save_entity_data(
-                    entity_type,
-                    repo,
-                    submitted_form_data,
-                    form_fields_config,
-                    dialog_mode,
-                    st.session_state[editing_id_key],
-                    parent_id_field_name,
-                    parent_id_value,
-                ):
-                    st.session_state[show_dialog_key] = False
-                    st.session_state[editing_id_key] = None
-                    st.rerun()
-                else:  # Save failed, keep dialog open
-                    st.session_state[show_dialog_key] = True
-                    st.rerun()
+                if _save_entity_data(entity_type, repo, submitted_form_data, form_fields_config, dialog_mode, editing_id, parent_id_field_name, parent_id_value):
+                    st.session_state[show_dialog_key] = False; st.session_state[editing_id_key] = None; st.rerun()
+                else: # Save failed, keep dialog open
+                    st.session_state[show_dialog_key] = True # Ensure dialog stays open
+                    # No rerun here, let error messages display within the current form render
 
         if dialog_mode == "edit":
             with form_action_cols[1]:
-                if st.form_submit_button(
-                    f"🗑️ Deletar {title_singular}",
-                    type="secondary",
-                    use_container_width=True,
-                ):
+                if st.form_submit_button(f"🗑️ Deletar {title_singular}", type="secondary", use_container_width=True):
                     st.session_state[confirm_delete_key] = True
-                    st.rerun()  # Rerun to show confirmation dialog part
+                    st.rerun() # Rerun to show confirmation dialog part
 
     if st.session_state.get(confirm_delete_key, False):
-        if _handle_entity_deletion(
-            entity_type,
-            repo,
-            st.session_state[editing_id_key],
-            data,
-            related_repos or {},
-            title_singular,
-        ):
-            st.session_state[show_dialog_key] = False
-            st.session_state[editing_id_key] = None
-            st.session_state[confirm_delete_key] = False
-            st.rerun()
-        else:  # Deletion failed or cancelled, keep dialog open if not cancelled by button
-            if not st.session_state.get(
-                f"cancel_del_btn_{entity_type}_clicked", False
-            ):  # Poor man's check, might need better state handling
-                st.session_state[show_dialog_key] = True
-            st.session_state.pop(
-                f"cancel_del_btn_{entity_type}_clicked", None
-            )  # clean up
-            # If _handle_entity_deletion returned False because of an error, the dialog should remain open.
-            # If it returned False because cancel was clicked, rerun would have happened inside _handle_entity_deletion.
-            # This part might need refinement based on exact flow of _handle_entity_deletion's False returns.
-            st.rerun()
+        # Note: _handle_entity_deletion now uses module-level repos
+        if _handle_entity_deletion(entity_type, editing_id, data, title_singular):
+            st.session_state[show_dialog_key] = False; st.session_state[editing_id_key] = None; st.session_state[confirm_delete_key] = False; st.rerun()
+        else: # Deletion failed or cancelled
+            # If cancellation was by button click inside _handle_entity_deletion, it would have rerun.
+            # If it's a failure, we might want to keep the confirm_delete_key or dialog open.
+            # For now, let's assume failure means we keep the confirmation dialog part.
+            # If cancel button was clicked, confirm_delete_key is already False.
+            if st.session_state.get(confirm_delete_key): # if still true, means error happened, not cancellation
+                 st.session_state[show_dialog_key] = True # Keep main dialog open
+            # No direct rerun here to allow error messages from _handle_entity_deletion to show if it didn't rerun itself.
 
-    if st.button(
-        "Fechar Diálogo",
-        key=f"close_dialog_btn_{entity_type}",
-        use_container_width=True,
-    ):
-        st.session_state[show_dialog_key] = False
-        st.session_state[editing_id_key] = None
-        st.session_state[confirm_delete_key] = False
-        st.rerun()
+    if st.button("Fechar Diálogo", key=f"close_dialog_btn_{entity_type}", use_container_width=True):
+        st.session_state[show_dialog_key] = False; st.session_state[editing_id_key] = None; st.session_state[confirm_delete_key] = False; st.rerun()
 
 
 # --- Funções Wrapper para Diálogos Específicos ---
-# These wrappers will need access to the actual repository instances.
-# For now, they are commented out or will raise errors until repositories are correctly imported/passed.
-# This will be addressed when app.py and service/repository instantiation is refactored.
-
-# To make this runnable for now, we'll assume these repos are globally available or passed.
-# This is a temporary measure for this step.
-# from app import bidding_repo, item_repo, supplier_repo, competitor_repo, quote_repo, bid_repo # Circular import
-# For now, these wrappers won't work correctly without the repos.
-# The goal of this step is to move the code structure.
-
-# --- Placeholder for repository instances ---
-# These would ideally be imported from a central location (e.g., services.py or db.database.py)
-# For the purpose of this step, we'll define them as None and the dialogs might not fully work
-# until the main app.py refactoring passes them correctly or they are imported.
-
-bidding_repo: SQLModelRepository = None
-item_repo: SQLModelRepository = None
-supplier_repo: SQLModelRepository = None
-competitor_repo: SQLModelRepository = None
-quote_repo: SQLModelRepository = None
-bid_repo: SQLModelRepository = None
-
+# These wrappers will now use the module-level underscore-prefixed repository instances.
 
 # The user of these functions will need to set these repository variables,
 # perhaps through a setup function or by importing them from where they are initialized.
 def set_dialog_repositories(
-    b_repo: SQLModelRepository,
-    i_repo: SQLModelRepository,
-    s_repo: SQLModelRepository,
-    c_repo: SQLModelRepository,
-    q_repo: SQLModelRepository,
-    bi_repo: SQLModelRepository,
+    b_repo: SQLModelRepository[Bidding],
+    i_repo: SQLModelRepository[Item],
+    s_repo: SQLModelRepository[Supplier],
+    c_repo: SQLModelRepository[Competitor],
+    q_repo: SQLModelRepository[Quote],
+    bi_repo: SQLModelRepository[Bid],
 ):
-    global bidding_repo, item_repo, supplier_repo, competitor_repo, quote_repo, bid_repo
-    bidding_repo = b_repo
-    item_repo = i_repo
-    supplier_repo = s_repo
-    competitor_repo = c_repo
-    quote_repo = q_repo
-    bid_repo = bi_repo
+    global _bidding_repo, _item_repo, _supplier_repo, _competitor_repo, _quote_repo, _bid_repo
+    _bidding_repo = b_repo
+    _item_repo = i_repo
+    _supplier_repo = s_repo
+    _competitor_repo = c_repo
+    _quote_repo = q_repo
+    _bid_repo = bi_repo
 
 
 @st.dialog("Gerenciar Licitação", width="large")
 def manage_bidding_dialog_wrapper():
-    if (
-        not bidding_repo or not item_repo or not quote_repo or not bid_repo
-    ):  # Check if repos are set
+    if not _bidding_repo or not _item_repo or not _quote_repo or not _bid_repo:
         st.error("Repositórios não configurados para o diálogo de licitação.")
+        if st.button("Fechar"): st.rerun()
         return
     _manage_generic_dialog(
         "bidding",
-        bidding_repo,
+        _bidding_repo, # Pass the main repo for this entity type
         bidding_form_config,
         "Licitação",
-        related_repos={
-            "item_repo": item_repo,
-            "quote_repo": quote_repo,
-            "bid_repo": bid_repo,
-        },
+        # related_repos argument removed, _handle_entity_deletion uses module repos
     )
 
 
 @st.dialog("Gerenciar Item da Licitação", width="large")
 def manage_item_dialog_wrapper():
-    if not item_repo or not bidding_repo or not quote_repo or not bid_repo:
+    if not _item_repo or not _bidding_repo or not _quote_repo or not _bid_repo:
         st.error("Repositórios não configurados para o diálogo de item.")
+        if st.button("Fechar"): st.rerun()
         return
 
     parent_bidding_id = st.session_state.get("parent_bidding_id_for_item_dialog")
     if parent_bidding_id is None:
-        st.error("Licitação pai não definida.")
-        st.session_state.show_manage_item_dialog = False
-        st.rerun()
-        return
+        st.error("Licitação pai não definida."); st.session_state.show_manage_item_dialog = False; st.rerun(); return
 
-    parent_bidding = bidding_repo.get(parent_bidding_id)
+    # Fetch parent bidding using core service via its repo to display info
+    # _bidding_repo must be asserted as not None due to the check above
+    parent_bidding = core_services.get_bidding_by_id(cast(SQLModelRepository[Bidding], _bidding_repo), parent_bidding_id)
     if not parent_bidding:
-        st.error("Licitação pai não encontrada.")
-        st.session_state.show_manage_item_dialog = False
-        st.rerun()
-        return
+        st.error("Licitação pai não encontrada."); st.session_state.show_manage_item_dialog = False; st.rerun(); return
+
     st.info(f"Para Licitação: {parent_bidding.process_number} - {parent_bidding.city}")
 
     _manage_generic_dialog(
         "item",
-        item_repo,
+        _item_repo, # Pass the main repo for this entity type
         item_form_config,
         "Item",
-        related_repos={"quote_repo": quote_repo, "bid_repo": bid_repo},
+        # related_repos argument removed
         parent_id_field_name="bidding_id",
         parent_id_value=parent_bidding_id,
     )
@@ -627,29 +544,31 @@ def manage_item_dialog_wrapper():
 
 @st.dialog("Gerenciar Fornecedor", width="large")
 def manage_supplier_dialog_wrapper():
-    if not supplier_repo or not quote_repo:
+    if not _supplier_repo or not _quote_repo:
         st.error("Repositórios não configurados para o diálogo de fornecedor.")
+        if st.button("Fechar"): st.rerun()
         return
     _manage_generic_dialog(
         "supplier",
-        supplier_repo,
+        _supplier_repo, # Pass the main repo for this entity type
         contact_entity_form_config,
         "Fornecedor",
-        related_repos={"quote_repo": quote_repo},
+        # related_repos argument removed
     )
 
 
 @st.dialog("Gerenciar Concorrente", width="large")
 def manage_competitor_dialog_wrapper():
-    if not competitor_repo or not bid_repo:
+    if not _competitor_repo or not _bid_repo:
         st.error("Repositórios não configurados para o diálogo de concorrente.")
+        if st.button("Fechar"): st.rerun()
         return
     _manage_generic_dialog(
         "competitor",
-        competitor_repo,
+        _competitor_repo, # Pass the main repo for this entity type
         contact_entity_form_config,
         "Concorrente",
-        related_repos={"bid_repo": bid_repo},
+        # related_repos argument removed
     )
 
 

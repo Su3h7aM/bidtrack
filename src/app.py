@@ -11,7 +11,8 @@ from db.models import (
     Bid,
 )
 
-from repository import SQLModelRepository
+# from repository import SQLModelRepository # No longer needed for direct import here
+from services import core as core_services # Import core services
 from services.dataframes import get_quotes_dataframe, get_bids_dataframe
 from state import initialize_session_state
 from services.plotting import create_quotes_figure, create_bids_figure
@@ -46,6 +47,14 @@ initialize_session_state()
 
 # Initialize dialog repositories
 # This needs to be called once after repositories are initialized.
+# Explicitly type hint repository variables for clarity
+bidding_repo: SQLModelRepository[Bidding] = bidding_repo
+item_repo: SQLModelRepository[Item] = item_repo
+supplier_repo: SQLModelRepository[Supplier] = supplier_repo
+competitor_repo: SQLModelRepository[Competitor] = competitor_repo
+quote_repo: SQLModelRepository[Quote] = quote_repo
+bid_repo: SQLModelRepository[Bid] = bid_repo
+
 set_dialog_repositories(
     b_repo=bidding_repo,
     i_repo=item_repo,
@@ -61,7 +70,7 @@ st.title(APP_TITLE)
 
 # --- Seleção de Licitação e Botão de Gerenciamento ---
 col_bid_select, col_bid_manage_btn = st.columns([5, 2], vertical_alignment="bottom")
-all_biddings = bidding_repo.get_all()
+all_biddings = core_services.get_all_biddings(bidding_repo) # Use core service
 bidding_options_map, bidding_option_ids = get_options_map(
     data_list=all_biddings,
     extra_cols=["process_number", "city", "mode"],
@@ -108,14 +117,10 @@ if st.session_state.selected_bidding_id is not None:
         [5, 2], vertical_alignment="bottom"
     )
 
-    all_items = item_repo.get_all()
-    items_for_select = [
-        item
-        for item in all_items
-        if item.bidding_id == st.session_state.selected_bidding_id
-    ]
+    # Fetch items already filtered by bidding_id using core service
+    items_for_select = core_services.get_items_by_bidding_id(item_repo, st.session_state.selected_bidding_id)
     item_options_map, item_option_ids = get_options_map(
-        data_list=items_for_select,
+        data_list=items_for_select, # This list is already filtered
         name_col="name",
         default_message=DEFAULT_ITEM_SELECT_MESSAGE,
     )
@@ -189,7 +194,7 @@ if st.session_state.selected_item_id is not None:
                         col_supp_select, col_supp_manage = st.columns(
                             [3, 2], vertical_alignment="bottom"
                         )
-                        all_suppliers = supplier_repo.get_all()
+                        all_suppliers = core_services.get_all_suppliers(supplier_repo) # Use core service
                         supplier_options_map, supplier_option_ids = get_options_map(
                             data_list=all_suppliers,
                             default_message=DEFAULT_SUPPLIER_SELECT_MESSAGE,
@@ -237,23 +242,25 @@ if st.session_state.selected_item_id is not None:
                                     and st.session_state.selected_item_id is not None
                                 ):
                                     try:
-                                        new_quote = Quote(
-                                            item_id=st.session_state.selected_item_id,
-                                            supplier_id=selected_supplier_id_quote,
-                                            price=Decimal(quote_price),
-                                            margin=quote_margin,  # Added margin
+                                        new_quote_instance = Quote(
+                                            item_id=st.session_state.selected_item_id, # type: ignore
+                                            supplier_id=selected_supplier_id_quote, # type: ignore
+                                            price=Decimal(str(quote_price)), # Ensure price is Decimal
+                                            margin=Decimal(str(quote_margin)), # Ensure margin is Decimal
                                             notes=quote_notes,
+                                            # created_at and updated_at will be handled by the model/service
                                         )
-                                        quote_repo.add(new_quote)
+                                        added_quote = core_services.add_quote(quote_repo, new_quote_instance)
                                         st.success(
-                                            f"Orçamento de {supplier_options_map.get(selected_supplier_id_quote, 'Fornecedor')} adicionado!"
+                                            f"Orçamento de {supplier_options_map.get(selected_supplier_id_quote, 'Fornecedor')} (ID: {added_quote.id}) adicionado!"
                                         )
+                                        # Clear form or reset relevant session state if needed here
                                         st.rerun()
                                     except Exception as e:
                                         st.error(f"Erro ao salvar orçamento: {e}")
                                 else:
                                     st.error(
-                                        "Selecione um item, um fornecedor e insira um preço válido."
+                                        "Selecione um item, um fornecedor, e insira preço e margem válidos."
                                     )
                 with expander_cols[1]:
                     with st.expander(
@@ -263,7 +270,7 @@ if st.session_state.selected_item_id is not None:
                         col_comp_select, col_comp_manage = st.columns(
                             [3, 2], vertical_alignment="bottom"
                         )
-                        all_competitors = competitor_repo.get_all()
+                        all_competitors = core_services.get_all_competitors(competitor_repo) # Use core service
                         competitor_options_map, competitor_option_ids = get_options_map(
                             data_list=all_competitors,
                             default_message=DEFAULT_COMPETITOR_SELECT_MESSAGE,
@@ -305,49 +312,36 @@ if st.session_state.selected_item_id is not None:
                                     and hasattr(current_item_details, "bidding_id")
                                 ):
                                     try:
-                                        new_bid = Bid(
-                                            item_id=st.session_state.selected_item_id,
-                                            bidding_id=current_item_details.bidding_id,  # Sourced from current_item_details
-                                            competitor_id=selected_competitor_id_bid,
-                                            price=Decimal(bid_price),
+                                        new_bid_instance = Bid(
+                                            item_id=st.session_state.selected_item_id, # type: ignore
+                                            bidding_id=current_item_details.bidding_id, # type: ignore
+                                            competitor_id=selected_competitor_id_bid, # type: ignore
+                                            price=Decimal(str(bid_price)), # Ensure price is Decimal
                                             notes=bid_notes,
+                                            # created_at and updated_at will be handled by the model/service
                                         )
-                                        bid_repo.add(new_bid)
+                                        added_bid = core_services.add_bid(bid_repo, new_bid_instance)
                                         st.success(
-                                            f"Lance de {competitor_options_map.get(selected_competitor_id_bid, 'Concorrente')} adicionado!"
+                                            f"Lance de {competitor_options_map.get(selected_competitor_id_bid, 'Concorrente')} (ID: {added_bid.id}) adicionado!"
                                         )
+                                        # Clear form or reset relevant session state if needed here
                                         st.rerun()
                                     except Exception as e:
                                         st.error(f"Erro ao salvar lance: {e}")
                                 else:
                                     st.error(
-                                        "Selecione um item, um concorrente, certifique-se que o item tem `bidding_id` e insira um preço válido."
+                                        "Selecione um item, um concorrente, certifique-se que o item tem `bidding_id` associado e insira um preço válido."
                                     )
 
-                all_quotes = quote_repo.get_all()
-                quotes_for_item_list = [
-                    q
-                    for q in all_quotes
-                    if q.item_id == st.session_state.selected_item_id
-                ]
+                # Fetch quotes and bids for the selected item using core services
+                quotes_for_item_list = core_services.get_quotes_by_item_id(quote_repo, st.session_state.selected_item_id)
+                bids_for_item_list = core_services.get_bids_by_item_id(bid_repo, st.session_state.selected_item_id)
 
-                all_bids = bid_repo.get_all()
-                bids_for_item_list = [
-                    b
-                    for b in all_bids
-                    if b.item_id == st.session_state.selected_item_id
-                ]
-
-                # Use the new data processing functions
-                all_suppliers = (
-                    supplier_repo.get_all()
-                )  # Ensure all_suppliers is defined
-                all_competitors = (
-                    competitor_repo.get_all()
-                )  # Ensure all_competitors is defined
+                # These are still needed for dataframe creation, fetched earlier or ensure they are fetched if not already
+                # Note: all_suppliers and all_competitors are already fetched above in the expanders using core_services
 
                 quotes_for_item_df_display = get_quotes_dataframe(
-                    quotes_for_item_list, all_suppliers
+                    quotes_for_item_list, all_suppliers # all_suppliers fetched in quote expander
                 )
                 bids_for_item_df_display = get_bids_dataframe(
                     bids_for_item_list, all_competitors
