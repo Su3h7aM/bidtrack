@@ -7,7 +7,7 @@ from typing import Any, cast
 from db.models import Bidding, Item, Supplier, Competitor, Quote, Bid, BiddingMode
 
 # Repository type hint (still needed for parameters and module-level vars)
-from repository import SQLModelRepository
+from repository.sqlmodel import SQLModelRepository # Updated import for new location
 
 
 # --- Module-level repository instances, to be set by set_dialog_repositories ---

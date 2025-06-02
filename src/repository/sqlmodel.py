@@ -1,29 +1,8 @@
-from abc import ABC, abstractmethod
 from typing import override, Any
 from sqlalchemy import Engine
 from sqlmodel import SQLModel, create_engine, Session, select
 
-
-class Repository[T](ABC):
-    @abstractmethod
-    def add(self, item: T) -> T:
-        raise NotImplementedError
-
-    @abstractmethod
-    def get(self, id: int) -> T | None:
-        raise NotImplementedError
-
-    @abstractmethod
-    def get_all(self) -> list[T]:
-        raise NotImplementedError
-
-    @abstractmethod
-    def update(self, item_id: int, item_data: dict[str, Any]) -> T | None:
-        raise NotImplementedError
-
-    @abstractmethod
-    def delete(self, id: int) -> bool:
-        raise NotImplementedError
+from .interface import Repository # Updated import for the interface
 
 
 class SQLModelRepository[T: SQLModel](Repository[T]):
@@ -32,16 +11,14 @@ class SQLModelRepository[T: SQLModel](Repository[T]):
     ) -> None:
         self.model: type[T] = model
         self.engine: Engine = create_engine(db_url)
-        SQLModel.metadata.create_all(self.engine)
+        SQLModel.metadata.create_all(self.engine) # Ensure tables are created
 
     @override
     def add(self, item: T) -> T:
         with Session(self.engine) as session:
-            # Ensure ID and timestamps are managed by the database for new records
-            if hasattr(item, "id"):
+            if hasattr(item, "id"): # Manage ID for new records
                 item.id = None
-            # created_at and updated_at are typically handled by the database or model defaults
-            # So, no need to set them to None here if they have default_factory in model
+            # created_at and updated_at are often handled by model defaults or DB
             session.add(item)
             session.commit()
             session.refresh(item)
@@ -57,28 +34,36 @@ class SQLModelRepository[T: SQLModel](Repository[T]):
         with Session(self.engine) as session:
             statement = select(self.model)
             all_items = session.exec(statement).all()
-            return list(all_items)
+            return list(all_items) # Ensure a list is returned
 
     @override
     def update(self, item_id: int, item_data: dict[str, Any]) -> T | None:
         with Session(self.engine) as session:
             db_item = session.get(self.model, item_id)
             if db_item:
-                # Exclude 'id', 'created_at', and 'updated_at' from item_data
+                item_changed = False
                 for key, value in item_data.items():
+                    # Ensure not to update primary key or protected fields directly
                     if key not in ["id", "created_at", "updated_at"] and hasattr(db_item, key):
-                        setattr(db_item, key, value)
-                session.add(db_item)
-                session.commit()
-                session.refresh(db_item)
+                        if getattr(db_item, key) != value:
+                            setattr(db_item, key, value)
+                            item_changed = True
+                if item_changed:
+                    # Handle 'updated_at' if it's a model concern and not purely DB
+                    if hasattr(db_item, "updated_at"):
+                        from datetime import datetime # Conditional import
+                        setattr(db_item, "updated_at", datetime.now())
+                    session.add(db_item)
+                    session.commit()
+                    session.refresh(db_item)
             return db_item
 
     @override
     def delete(self, id: int) -> bool:
         with Session(self.engine) as session:
-            item = session.get(self.model, id)
-            if item:
-                session.delete(item)
+            item_to_delete = session.get(self.model, id)
+            if item_to_delete:
+                session.delete(item_to_delete)
                 session.commit()
                 return True
             return False

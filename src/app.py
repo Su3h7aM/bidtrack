@@ -11,10 +11,10 @@ from db.models import (
     Bid,
 )
 
-from repository import SQLModelRepository
+from repository.sqlmodel import SQLModelRepository # Updated import for new location
 # from services import core as core_services # No longer needed in app.py
 from services.dataframes import get_quotes_dataframe, get_bids_dataframe
-from state import initialize_session_state
+# from state import initialize_session_state # Will be defined in-file
 from services.plotting import create_quotes_figure, create_bids_figure
 from ui.utils import get_options_map
 from ui.dialogs import (
@@ -24,6 +24,34 @@ from ui.dialogs import (
     manage_competitor_dialog_wrapper,
     set_dialog_repositories,  # To pass repo instances
 )
+
+# --- Session State Initialization Function (moved from state.py) ---
+def initialize_session_state():
+    """Initializes all session state variables for the application."""
+
+    # IDs Selecionados
+    if "selected_bidding_id" not in st.session_state:
+        st.session_state.selected_bidding_id = None
+    if "selected_item_id" not in st.session_state:
+        st.session_state.selected_item_id = None
+
+    # Nomes para exibição
+    if "selected_bidding_name_for_display" not in st.session_state:
+        st.session_state.selected_bidding_name_for_display = None
+    if "selected_item_name_for_display" not in st.session_state:
+        st.session_state.selected_item_name_for_display = None
+
+    # Estado para controlar abertura de diálogos e edição
+    for dialog_type in ["bidding", "item", "supplier", "competitor"]:
+        if f"show_manage_{dialog_type}_dialog" not in st.session_state:
+            st.session_state[f"show_manage_{dialog_type}_dialog"] = False
+        if f"editing_{dialog_type}_id" not in st.session_state:
+            st.session_state[f"editing_{dialog_type}_id"] = None
+        if f"confirm_delete_{dialog_type}" not in st.session_state:
+            st.session_state[f"confirm_delete_{dialog_type}"] = False
+
+    if "parent_bidding_id_for_item_dialog" not in st.session_state:
+        st.session_state.parent_bidding_id_for_item_dialog = None
 
 # --- Database Repository Instances ---
 db_url = "sqlite:///data/bidtrack.db"  # Define the database URL
