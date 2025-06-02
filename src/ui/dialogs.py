@@ -173,7 +173,7 @@ def _save_entity_data(
         not (
             config.get("required")
             and not form_data_submitted.get(field)
-            and form_data_submitted.get(field) != 0
+            and form_data_submitted.get(field) != 0 # Check for 0 as a valid input
         )
         for field, config in form_fields_config.items()
         if isinstance(config, dict)
@@ -182,57 +182,44 @@ def _save_entity_data(
         st.error("Por favor, preencha todos os campos obrigatórios (*).")
         return False
 
-    save_data = {
+    # Prepare data, excluding fields not in form_fields_config
+    # and handling specific mappings like description -> desc
+    data_to_save = {
         k: v for k, v in form_data_submitted.items() if k in form_fields_config
     }
-
-    # Handle specific field name mappings (e.g., description -> desc)
-    if entity_type in ["item", "supplier", "competitor"] and "description" in save_data:
-        save_data["desc"] = save_data.pop("description")
+    if entity_type in ["item", "supplier", "competitor"] and "description" in data_to_save:
+        data_to_save["desc"] = data_to_save.pop("description")
 
     # Handle Bidding specific date/time combination
     if entity_type == "bidding":
-        session_date_val = save_data.pop("session_date", None)
-        session_time_val = save_data.pop("session_time", None)
+        session_date_val = data_to_save.pop("session_date", None)
+        session_time_val = data_to_save.pop("session_time", None)
         if session_date_val:
-            save_data["date"] = datetime.combine(
+            data_to_save["date"] = datetime.combine(
                 session_date_val, session_time_val if session_time_val else time.min
             )
         else:
-            save_data["date"] = None # Explicitly set to None if no date
+            data_to_save["date"] = None
 
-    # Convert empty strings to None for specific optional fields before creating/updating model
+    # Convert empty strings to None for specific optional fields
     if entity_type in ["supplier", "competitor"]:
         fields_to_nullify_if_empty = ["website", "email", "phone", "desc"]
         for field_name in fields_to_nullify_if_empty:
-            if field_name in save_data and save_data[field_name] == "":
-                save_data[field_name] = None
+            if field_name in data_to_save and data_to_save[field_name] == "":
+                data_to_save[field_name] = None
 
     title_singular = form_fields_config.get("_title_singular", entity_type.capitalize())
 
     try:
-        model_instance: Any = None
         if dialog_mode == "new":
             if parent_id_field_name and parent_id_value is not None:
-                save_data[parent_id_field_name] = parent_id_value
+                data_to_save[parent_id_field_name] = parent_id_value
 
-            # Create model instance based on entity type
-            if entity_type == "bidding":
-                model_instance = Bidding(**save_data)
-                # We need to cast repo to the correct type for the core service call
-                created_entity = core_services.save_bidding(cast(SQLModelRepository[Bidding], repo), model_instance)
-            elif entity_type == "item":
-                model_instance = Item(**save_data)
-                created_entity = core_services.save_item(cast(SQLModelRepository[Item], repo), model_instance)
-            elif entity_type == "supplier":
-                model_instance = Supplier(**save_data)
-                created_entity = core_services.save_supplier(cast(SQLModelRepository[Supplier], repo), model_instance)
-            elif entity_type == "competitor":
-                model_instance = Competitor(**save_data)
-                created_entity = core_services.save_competitor(cast(SQLModelRepository[Competitor], repo), model_instance)
-            else:
-                st.error(f"Tipo de entidade desconhecido: {entity_type}")
-                return False
+            # Directly use repo.model (which should be the SQLModel class)
+            # The type of repo is SQLModelRepository[T], so repo.model is type[T]
+            model_cls = repo.model
+            model_instance = model_cls(**data_to_save)
+            created_entity = repo.add(model_instance)
 
             display_name = getattr(created_entity, "name", getattr(created_entity, "process_number", str(created_entity.id)))
             st.success(f"{title_singular} '{display_name}' (ID: {created_entity.id}) criado(a) com sucesso!")
@@ -242,41 +229,16 @@ def _save_entity_data(
                 st.error(f"ID de edição não fornecido para {title_singular}.")
                 return False
 
-            # Fetch existing entity via core service to ensure it's a valid SQLModel instance
-            current_entity: Any = None
-            if entity_type == "bidding":
-                current_entity = core_services.get_bidding_by_id(cast(SQLModelRepository[Bidding], repo), editing_id)
-            elif entity_type == "item":
-                current_entity = core_services.get_item_by_id(cast(SQLModelRepository[Item], repo), editing_id)
-            elif entity_type == "supplier":
-                current_entity = core_services.get_supplier_by_id(cast(SQLModelRepository[Supplier], repo), editing_id)
-            elif entity_type == "competitor":
-                current_entity = core_services.get_competitor_by_id(cast(SQLModelRepository[Competitor], repo), editing_id)
+            # For updates, data_to_save is the dict of fields to update
+            # No need to fetch the entity first if repo.update handles partial updates with a dict
+            # The repository's update method takes (item_id: int, item_data: dict[str, Any])
+            # Ensure 'id', 'created_at', 'updated_at' are not in data_to_save for update
+            update_dict = {k: v for k, v in data_to_save.items() if k not in ['id', 'created_at', 'updated_at']}
 
-            if not current_entity:
-                st.error(f"{title_singular} com ID {editing_id} não encontrado para atualização.")
-                return False
+            updated_entity = repo.update(editing_id, update_dict)
 
-            # Update fields on the fetched entity instance
-            for field, value in save_data.items():
-                if hasattr(current_entity, field):
-                    setattr(current_entity, field, value)
-
-            # Now call the save service with the updated model instance
-            if entity_type == "bidding":
-                updated_entity = core_services.save_bidding(cast(SQLModelRepository[Bidding], repo), current_entity)
-            elif entity_type == "item":
-                updated_entity = core_services.save_item(cast(SQLModelRepository[Item], repo), current_entity)
-            elif entity_type == "supplier":
-                updated_entity = core_services.save_supplier(cast(SQLModelRepository[Supplier], repo), current_entity)
-            elif entity_type == "competitor":
-                updated_entity = core_services.save_competitor(cast(SQLModelRepository[Competitor], repo), current_entity)
-            else: # Should not happen if type check at start is robust
-                st.error(f"Tipo de entidade desconhecido: {entity_type} durante atualização.")
-                return False
-
-            if updated_entity is None: # Should be caught by save_bidding if item not found, but as safeguard
-                st.error(f"Falha ao atualizar {title_singular} com ID {editing_id}. Entidade não encontrada após a tentativa de atualização.")
+            if updated_entity is None:
+                st.error(f"Falha ao atualizar {title_singular} com ID {editing_id}. Entidade não encontrada.")
                 return False
 
             display_name = getattr(updated_entity, "name", getattr(updated_entity, "process_number", str(updated_entity.id)))
@@ -398,26 +360,17 @@ def _manage_generic_dialog(
 
     if editing_id is not None:
         dialog_mode = "edit"
-        entity_to_edit: Any = None
+        entity_to_edit: Any = None # Should be T | None
         try:
-            # Fetch entity using core services
-            if entity_type == "bidding":
-                entity_to_edit = core_services.get_bidding_by_id(cast(SQLModelRepository[Bidding], repo), editing_id)
-            elif entity_type == "item":
-                entity_to_edit = core_services.get_item_by_id(cast(SQLModelRepository[Item], repo), editing_id)
-            elif entity_type == "supplier":
-                entity_to_edit = core_services.get_supplier_by_id(cast(SQLModelRepository[Supplier], repo), editing_id)
-            elif entity_type == "competitor":
-                entity_to_edit = core_services.get_competitor_by_id(cast(SQLModelRepository[Competitor], repo), editing_id)
-            else:
-                st.error(f"Tipo de entidade desconhecido para carregar: {entity_type}")
-                st.session_state[show_dialog_key] = False; st.rerun(); return
+            # Fetch entity using direct repository call
+            # repo is already the specific repository instance, e.g., _bidding_repo
+            entity_to_edit = repo.get(editing_id)
 
             if not entity_to_edit:
                 st.error(f"{title_singular} não encontrado(a) para edição (ID: {editing_id}).")
                 st.session_state[show_dialog_key] = False; st.session_state[editing_id_key] = None; st.rerun(); return
 
-            # Populate 'data' dict from the fetched entity
+            # Populate 'data' dict from the fetched entity for the form
             for field_key, config_val in form_fields_config.items():
                 if isinstance(config_val, dict): # Ensure it's a field config
                     model_attr = "desc" if field_key == "description" and entity_type in ["item", "supplier", "competitor"] else field_key
@@ -523,13 +476,14 @@ def manage_item_dialog_wrapper():
     if parent_bidding_id is None:
         st.error("Licitação pai não definida."); st.session_state.show_manage_item_dialog = False; st.rerun(); return
 
-    # Fetch parent bidding using core service via its repo to display info
-    # _bidding_repo must be asserted as not None due to the check above
-    parent_bidding = core_services.get_bidding_by_id(cast(SQLModelRepository[Bidding], _bidding_repo), parent_bidding_id)
-    if not parent_bidding:
-        st.error("Licitação pai não encontrada."); st.session_state.show_manage_item_dialog = False; st.rerun(); return
-
-    st.info(f"Para Licitação: {parent_bidding.process_number} - {parent_bidding.city}")
+    # Fetch parent bidding using direct repository call to display info
+    if _bidding_repo: # Check if _bidding_repo is initialized
+        parent_bidding = _bidding_repo.get(parent_bidding_id)
+        if not parent_bidding:
+            st.error("Licitação pai não encontrada."); st.session_state.show_manage_item_dialog = False; st.rerun(); return
+        st.info(f"Para Licitação: {parent_bidding.process_number} - {parent_bidding.city}")
+    else:
+        st.error("Repositório de Licitações não configurado."); st.session_state.show_manage_item_dialog = False; st.rerun(); return
 
     _manage_generic_dialog(
         "item",
