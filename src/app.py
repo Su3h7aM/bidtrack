@@ -450,16 +450,16 @@ if st.session_state.selected_item_id is not None:
                     if not quotes_for_item_df_display.empty:
                         # Columns to display, matching those returned by get_quotes_dataframe
                         display_cols_quotes = [
-                            "supplier_name",
-                            "price", # This is the base cost
-                            "freight",
-                            "additional_costs",
-                            "taxes",
-                            "margin",
-                            "calculated_price", # The new final selling price
-                            "created_at",
-                            "update_at", 
-                            "notes",
+                            "nome_fornecedor",
+                            "preco_base", 
+                            "frete",
+                            "custos_adicionais",
+                            "impostos", 
+                            "margem", 
+                            "preco_calculado", 
+                            "data_criacao",
+                            "data_atualizacao", 
+                            "notas",
                         ]
                         # Filter for existing columns to prevent KeyErrors if some are missing
                         final_display_cols_quotes = [
@@ -479,11 +479,11 @@ if st.session_state.selected_item_id is not None:
                     if not bids_for_item_df_display.empty:
                         # Columns to display, matching those returned by get_bids_dataframe
                         display_cols_bids = [
-                            "bidder_name", # Renamed column
-                            "price",
-                            "created_at",
-                            "notes",
-                            "update_at",
+                            "nome_licitante", 
+                            "preco",
+                            "data_criacao",
+                            "notas",
+                            "data_atualizacao",
                         ]
                         # Filter for existing columns
                         final_display_cols_bids = [
