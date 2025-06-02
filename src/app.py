@@ -53,6 +53,24 @@ def initialize_session_state():
     if "parent_bidding_id_for_item_dialog" not in st.session_state:
         st.session_state.parent_bidding_id_for_item_dialog = None
 
+# --- Helper function to manage dialog visibility ---
+def _open_dialog_exclusively(dialog_type_to_open: str):
+    """Ensures only one dialog is open at a time."""
+    st.session_state.show_manage_bidding_dialog = False
+    st.session_state.show_manage_item_dialog = False
+    st.session_state.show_manage_supplier_dialog = False
+    st.session_state.show_manage_bidder_dialog = False # Renamed from competitor
+
+    if dialog_type_to_open == "bidding":
+        st.session_state.show_manage_bidding_dialog = True
+    elif dialog_type_to_open == "item":
+        st.session_state.show_manage_item_dialog = True
+    elif dialog_type_to_open == "supplier":
+        st.session_state.show_manage_supplier_dialog = True
+    elif dialog_type_to_open == "bidder": # Renamed from competitor
+        st.session_state.show_manage_bidder_dialog = True
+
+
 # --- Database Repository Instances ---
 db_url = "sqlite:///data/bidtrack.db"  # Define the database URL
 
@@ -122,7 +140,7 @@ with col_bid_manage_btn:
         "➕ Gerenciar Licitações", key="btn_manage_bids_main", use_container_width=True
     ):
         st.session_state.editing_bidding_id = selected_bidding_id_from_sb
-        st.session_state.show_manage_bidding_dialog = True
+        _open_dialog_exclusively("bidding")
 
 if selected_bidding_id_from_sb != st.session_state.selected_bidding_id:
     st.session_state.selected_bidding_id = selected_bidding_id_from_sb
@@ -177,7 +195,7 @@ if st.session_state.selected_bidding_id is not None:
                 st.session_state.selected_bidding_id
             )
             st.session_state.editing_item_id = selected_item_id_from_sb
-            st.session_state.show_manage_item_dialog = True
+            _open_dialog_exclusively("item")
 
     if selected_item_id_from_sb != st.session_state.selected_item_id:
         st.session_state.selected_item_id = selected_item_id_from_sb
@@ -246,7 +264,7 @@ if st.session_state.selected_item_id is not None:
                                 st.session_state.editing_supplier_id = (
                                     selected_supplier_id_quote
                                 )
-                                st.session_state.show_manage_supplier_dialog = True
+                                _open_dialog_exclusively("supplier")
                         with st.form(key="new_quote_form"):
                             quote_price = st.number_input(
                                 "Preço do Orçamento (Custo do Produto)*", # Clarified label
@@ -376,7 +394,7 @@ if st.session_state.selected_item_id is not None:
                                 st.session_state.editing_bidder_id = ( # Renamed variable
                                     selected_bidder_id_bid # Renamed variable
                                 )
-                                st.session_state.show_manage_bidder_dialog = True # Renamed variable
+                                _open_dialog_exclusively("bidder") # Renamed variable
                         with st.form(key="new_bid_form"):
                             bid_price = st.number_input(
                                 "Preço do Lance*",
