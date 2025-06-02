@@ -185,4 +185,65 @@ def test_get_bids_dataframe_mixed_bidders():
     
     for col in EXPECTED_BIDS_DF_COLS_NON_EMPTY:
         assert col in result_df.columns
+
+
+def test_get_bids_dataframe_scenarios():
+    """
+    Tests get_bids_dataframe with various scenarios, focusing on bidder_name.
+    """
+    # Scenario 1: Empty bids_list
+    empty_bids_df = get_bids_dataframe(bids_list=[], bidders_list=[])
+    assert empty_bids_df.empty
+    assert list(empty_bids_df.columns) == EXPECTED_EMPTY_BIDS_DF_COLS
+
+    # Scenario 2: Populated bids_list, empty bidders_list
+    bids_for_scenario_2 = [
+        Bid(id=10, item_id=1, bidding_id=1, bidder_id=1, price=Decimal("100.00"), created_at=datetime.now(timezone.utc)),
+        Bid(id=11, item_id=1, bidding_id=1, bidder_id=2, price=Decimal("150.00"), created_at=datetime.now(timezone.utc)),
+    ]
+    scenario_2_df = get_bids_dataframe(bids_list=bids_for_scenario_2, bidders_list=[])
+    assert len(scenario_2_df) == 2
+    assert "bidder_name" in scenario_2_df.columns
+    assert scenario_2_df["bidder_name"].tolist() == ["N/D", "N/D"]
+    assert "price" in scenario_2_df.columns
+    assert scenario_2_df["price"].tolist() == [Decimal("100.00"), Decimal("150.00")]
+    # Check for expected columns (non-empty case)
+    for col in EXPECTED_BIDS_DF_COLS_NON_EMPTY:
+        assert col in scenario_2_df.columns
+
+    # Scenario 3: Populated bids_list and bidders_list (mixed cases)
+    bidders_for_scenario_3 = [
+        Bidder(id=101, name="Bidder One Zero One", created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc)),
+        # Bidder with id=102 is intentionally missing from this list for testing unmatched case
+    ]
+    bids_for_scenario_3 = [
+        Bid(id=20, item_id=2, bidding_id=2, bidder_id=101, price=Decimal("200.00"), created_at=datetime.now(timezone.utc)), # Match
+        Bid(id=21, item_id=2, bidding_id=2, bidder_id=102, price=Decimal("250.00"), created_at=datetime.now(timezone.utc)), # No match in bidders_list
+        Bid(id=22, item_id=2, bidding_id=2, bidder_id=None, price=Decimal("300.00"), created_at=datetime.now(timezone.utc)),  # No bidder_id
+    ]
+    scenario_3_df = get_bids_dataframe(bids_list=bids_for_scenario_3, bidders_list=bidders_for_scenario_3)
+    
+    assert len(scenario_3_df) == 3
+    assert "bidder_name" in scenario_3_df.columns
+    assert "price" in scenario_3_df.columns
+
+    # Verify bidder_name and price for each bid
+    bid_20_data = scenario_3_df[scenario_3_df["id"] == 20]
+    assert not bid_20_data.empty
+    assert bid_20_data["bidder_name"].iloc[0] == "Bidder One Zero One"
+    assert bid_20_data["price"].iloc[0] == Decimal("200.00")
+
+    bid_21_data = scenario_3_df[scenario_3_df["id"] == 21]
+    assert not bid_21_data.empty
+    assert bid_21_data["bidder_name"].iloc[0] == "N/D"
+    assert bid_21_data["price"].iloc[0] == Decimal("250.00")
+
+    bid_22_data = scenario_3_df[scenario_3_df["id"] == 22]
+    assert not bid_22_data.empty
+    assert bid_22_data["bidder_name"].iloc[0] == "N/D"
+    assert bid_22_data["price"].iloc[0] == Decimal("300.00")
+    
+    # Check for expected columns (non-empty case)
+    for col in EXPECTED_BIDS_DF_COLS_NON_EMPTY:
+        assert col in scenario_3_df.columns
 ```
