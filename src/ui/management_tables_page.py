@@ -632,11 +632,11 @@ def show_management_tables_view(bidding_repo, item_repo, supplier_repo, quote_re
                     supplier_name = suppliers_list_for_quotes_map.get(quote.supplier_id, "N/A")
                     item_name = items_list_for_quotes_map.get(quote.item_id, "N/A")
                     
-                    base_price = quote.price if quote.price is not None else Decimal(0)
-                    freight = quote.freight if quote.freight is not None else Decimal(0)
-                    additional_costs = quote.additional_costs if quote.additional_costs is not None else Decimal(0)
-                    taxes_percentage = quote.taxes if quote.taxes is not None else Decimal(0)
-                    margin_percentage = quote.margin if quote.margin is not None else Decimal(0)
+                    base_price = Decimal(str(quote.price)) if quote.price is not None else Decimal(0)
+                    freight = Decimal(str(quote.freight)) if quote.freight is not None else Decimal(0)
+                    additional_costs = Decimal(str(quote.additional_costs)) if quote.additional_costs is not None else Decimal(0)
+                    taxes_percentage = Decimal(str(quote.taxes)) if quote.taxes is not None else Decimal(0)
+                    margin_percentage = Decimal(str(quote.margin)) if quote.margin is not None else Decimal(0)
                     
                     price_with_freight_costs = base_price + freight + additional_costs
                     taxes_value = price_with_freight_costs * (taxes_percentage / Decimal(100))
