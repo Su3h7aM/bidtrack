@@ -24,7 +24,14 @@ def get_options_map(
             try:
                 for col in extra_cols:
                     if hasattr(row, col):
-                        display_name_parts.append(str(getattr(row, col)))
+                        attribute = getattr(row, col)
+                        if col == "mode":
+                            try:
+                                display_name_parts.append(str(attribute.value))
+                            except AttributeError:
+                                display_name_parts.append(str(attribute)) # Fallback
+                        else:
+                            display_name_parts.append(str(attribute))
                     else:  # Add a placeholder if an expected extra_col is missing
                         display_name_parts.append(f"[{col}?]")
 

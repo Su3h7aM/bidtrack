@@ -101,7 +101,7 @@ col_bid_select, col_bid_manage_btn = st.columns([5, 2], vertical_alignment="bott
 all_biddings = bidding_repo.get_all() # Direct repository call
 bidding_options_map, bidding_option_ids = get_options_map(
     data_list=all_biddings,
-    extra_cols=["process_number", "city", "mode"],
+    extra_cols=["city", "process_number", "mode"], # Changed order
     default_message=DEFAULT_BIDDING_SELECT_MESSAGE,
 )
 
@@ -161,7 +161,7 @@ if st.session_state.selected_bidding_id is not None:
             else "Licitação Selecionada"
         )
         selected_item_id_from_sb = st.selectbox(
-            f"Escolha um Item da Licitação '{bidding_display_label}':",
+            "Escolha um Item da Licitação:", # Changed to static text
             options=item_option_ids,
             format_func=lambda x: item_options_map.get(x, DEFAULT_ITEM_SELECT_MESSAGE),
             index=item_option_ids.index(st.session_state.selected_item_id)
@@ -205,9 +205,12 @@ if st.session_state.selected_item_id is not None:
             ]
             if current_item_details_list:
                 current_item_details = current_item_details_list[0]
-                st.markdown(
-                    f"**Item Selecionado:** {current_item_details.name} (ID: {st.session_state.selected_item_id})"
-                )
+                item_code_display = current_item_details.code if current_item_details.code else "N/A"
+                st.markdown(f"**Código:** {item_code_display}")
+                # The "Item Selecionado: {item.name} (ID: {item.id})" line is removed.
+                # Display item name as part of the expander title for context.
+                # Consider adding Item Name here if it's deemed necessary for top-level info.
+                # For now, strictly following the "replace" instruction.
                 st.markdown(f"**Descrição:** {current_item_details.desc}")
                 st.markdown(
                     f"**Quantidade:** {current_item_details.quantity} {current_item_details.unit}"
@@ -217,7 +220,7 @@ if st.session_state.selected_item_id is not None:
                 expander_cols = st.columns(2)
                 with expander_cols[0]:
                     with st.expander(
-                        f"➕ Adicionar Novo Orçamento para {current_item_details.name}",
+                        "Novo Orçamento", # Changed to static text
                         expanded=False,
                     ):
                         col_supp_select, col_supp_manage = st.columns(
@@ -317,7 +320,7 @@ if st.session_state.selected_item_id is not None:
                                     )
                 with expander_cols[1]:
                     with st.expander(
-                        f"➕ Adicionar Novo Lance para {current_item_details.name}",
+                        "Novo Lance", # Changed to static text
                         expanded=False,
                     ):
                         col_bidder_select, col_bidder_manage = st.columns( # Renamed variables

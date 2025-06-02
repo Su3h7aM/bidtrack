@@ -123,6 +123,7 @@ class Item(SQLModel, table=True):
         sa_column=Column(DateTime, default=datetime.now(), onupdate=datetime.now()),
     )
 
+    code: str | None = Field(default=None, nullable=True) # New field
     name: str = Field(unique=True)
     desc: str | None = Field(default=None)
     unit: str | None = Field(default=None)
