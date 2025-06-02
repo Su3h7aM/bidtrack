@@ -63,7 +63,7 @@ class Bid(SQLModel, table=True):
     bidder_id: int | None = Field(default=None, foreign_key="bidder.id", nullable=True, ondelete="SET NULL") # Now optional
     bidding_id: int | None = Field(foreign_key="bidding.id", nullable=False, ondelete="CASCADE")
 
-    bidder: Optional["Bidder"] = Relationship() # Removed back_populates
+    bidder: Optional["Bidder"] = Relationship(back_populates="bids_association") # Restored back_populates
 
     notes: str | None = Field(default=None)
 
@@ -118,8 +118,8 @@ class Item(SQLModel, table=True):
     suppliers: Optional[list["Supplier"]] = Relationship(
         back_populates="items", link_model=Quote
     )
-    bidders: Optional[list["Bidder"]] = Relationship( # Renamed from competitors
-        back_populates="items", link_model=Bid
+    bidders: Optional[list["Bidder"]] = Relationship( 
+        back_populates="items", link_model=Bid, overlaps="bidder" # Added overlaps
     )
 
 
@@ -163,6 +163,6 @@ class Bidder(SQLModel, table=True): # Renamed class
     desc: str | None = Field(default=None)
 
     items: Optional[list["Item"]] = Relationship(
-        back_populates="bidders", link_model=Bid # Updated back_populates
+        back_populates="bidders", link_model=Bid, overlaps="bidder" # Added overlaps
     )
-    # bids_association: list["Bid"] = Relationship(back_populates="bidder") # Commented out
+    bids_association: list["Bid"] = Relationship(back_populates="bidder", overlaps="items,bidders") # Added overlaps
