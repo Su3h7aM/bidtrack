@@ -336,23 +336,36 @@ if st.session_state.selected_item_id is not None:
                         bidder_options_map_display = bidder_options_map.copy()
                         bidder_option_ids_display = list(bidder_option_ids)
 
-                        bidder_options_map_display[NO_BIDDER_SENTINEL] = "Nenhum Licitante / Lance Próprio"
+                        bidder_options_map_display[NO_BIDDER_SENTINEL] = "Nenhum Licitante" # Changed text
                         
                         # Insert "Nenhum Licitante" after the initial "Selecione..." prompt if it exists
-                        if initial_prompt_id is None and None in bidder_option_ids_display: # Default prompt ID is None
-                            insert_idx = 1 
-                        else: # No default "select" prompt, or it's not None. Add "Nenhum" at the start.
-                            insert_idx = 0
-                        bidder_option_ids_display.insert(insert_idx, NO_BIDDER_SENTINEL)
+                        # initial_prompt_id is bidder_option_ids[0] if it's None, otherwise a sentinel not equal to None
+                        prompt_is_none_and_present = initial_prompt_id is None and None in bidder_option_ids_display
                         
+                        if prompt_is_none_and_present:
+                            insert_idx = 1 # Insert after the "Selecione..."
+                        else: # No "Selecione..." prompt (or it's not None), or list was empty. Add "Nenhum" at the start.
+                            insert_idx = 0
+                        
+                        # Ensure not to insert if NO_BIDDER_SENTINEL is already there (e.g. from a previous run if list is not rebuilt)
+                        if NO_BIDDER_SENTINEL not in bidder_option_ids_display:
+                             bidder_option_ids_display.insert(insert_idx, NO_BIDDER_SENTINEL)
+                        
+                        # Determine the index for the default selection ("Nenhum Licitante")
+                        try:
+                            default_bidder_index = bidder_option_ids_display.index(NO_BIDDER_SENTINEL)
+                        except ValueError:
+                            default_bidder_index = 0 # Fallback, though should not happen if inserted
+
                         with col_bidder_select: 
                             selected_bidder_id_bid = st.selectbox( 
-                                "Licitante:", # Label changed to non-mandatory
+                                "Licitante:", 
                                 options=bidder_option_ids_display, 
                                 format_func=lambda x: bidder_options_map_display.get( 
-                                    x, DEFAULT_COMPETITOR_SELECT_MESSAGE 
+                                    x, DEFAULT_COMPETITOR_SELECT_MESSAGE # This is "Selecione ou Cadastre um Licitante..."
                                 ),
-                                key="sb_bidder_bid_exp", 
+                                key="sb_bidder_bid_exp",
+                                index=default_bidder_index # Set "Nenhum Licitante" as default
                             )
                         with col_bidder_manage: 
                             if st.button(
@@ -381,9 +394,12 @@ if st.session_state.selected_item_id is not None:
                                 
                                 # Validation: User must select a Licitante or "Nenhum Licitante".
                                 # The initial prompt (e.g., "Selecione...") should not be submittable as a valid choice.
-                                # initial_prompt_id is the ID for "Selecione ou Cadastre um Licitante..."
-                                if selected_bidder_id_bid == initial_prompt_id:
-                                    st.error("Por favor, selecione um Licitante ou a opção 'Nenhum Licitante / Lance Próprio'.")
+                                # initial_prompt_id was defined based on bidder_option_ids[0] being None.
+                                # If the selectbox is defaulted to "Nenhum Licitante", this check might change.
+                                # The important thing is that `selected_bidder_id_bid` should not be the ID of the prompt message.
+                                # The prompt message (e.g. "Selecione...") has ID `None` if `get_options_map` adds it.
+                                if selected_bidder_id_bid is None: # This means the "Selecione..." prompt is selected
+                                    st.error("Por favor, selecione um Licitante ou a opção 'Nenhum Licitante'.")
                                 elif bid_price > 0 and st.session_state.selected_item_id is not None and hasattr(current_item_details, "bidding_id"):
                                     try:
                                         new_bid_instance = Bid(
@@ -395,7 +411,7 @@ if st.session_state.selected_item_id is not None:
                                         )
                                         added_bid = bid_repo.add(new_bid_instance)
                                         
-                                        bidder_name_for_success_message = "Lance Próprio"
+                                        bidder_name_for_success_message = "Nenhum Licitante" # Default if actual_bidder_id_to_save is None
                                         if actual_bidder_id_to_save is not None:
                                             bidder_name_for_success_message = bidder_options_map_display.get(actual_bidder_id_to_save, 'Licitante Desconhecido')
                                         
@@ -406,9 +422,10 @@ if st.session_state.selected_item_id is not None:
                                     except Exception as e:
                                         st.error(f"Erro ao salvar lance: {e}")
                                 else:
-                                    # This error covers cases like bid_price <= 0 or item not selected
+                                    # This error covers cases like bid_price <= 0 or item not selected,
+                                    # or if the "Selecione..." prompt was somehow submitted (though caught above).
                                     st.error(
-                                        "Insira um preço de lance válido e certifique-se que um item está selecionado."
+                                        "Insira um preço de lance válido e certifique-se que um item está selecionado. Verifique também a seleção do licitante."
                                     )
 
                 # Fetch all quotes and bids, then filter in Python for the selected item
