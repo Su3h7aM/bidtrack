@@ -1,6 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum as PyEnum
+from typing import Optional # Added import
 from sqlmodel import (
     Column,
     Enum,
@@ -62,7 +63,7 @@ class Bid(SQLModel, table=True):
     bidder_id: int | None = Field(default=None, foreign_key="bidder.id", nullable=True, ondelete="SET NULL") # Now optional
     bidding_id: int | None = Field(foreign_key="bidding.id", nullable=False, ondelete="CASCADE")
 
-    bidder: "Bidder" | None = Relationship(back_populates="bids_association") 
+    bidder: Optional["Bidder"] = Relationship(back_populates="bids_association") # Changed to Optional
 
     notes: str | None = Field(default=None)
 
@@ -92,7 +93,7 @@ class Bidding(SQLModel, table=True):
     mode: BiddingMode = Field(sa_column=Column(Enum(BiddingMode)))
     process_number: str
 
-    items: list["Item"] | None = Relationship(back_populates="bidding", sa_relationship_kwargs={"cascade": "all, delete-orphan", "passive_deletes": True})
+    items: Optional[list["Item"]] = Relationship(back_populates="bidding", sa_relationship_kwargs={"cascade": "all, delete-orphan", "passive_deletes": True})
 
 
 class Item(SQLModel, table=True):
@@ -114,10 +115,10 @@ class Item(SQLModel, table=True):
     bidding_id: int | None = Field(foreign_key="bidding.id", nullable=False, ondelete="CASCADE")
 
     bidding: Bidding | None = Relationship(back_populates="items")
-    suppliers: list["Supplier"] | None = Relationship(
+    suppliers: Optional[list["Supplier"]] = Relationship(
         back_populates="items", link_model=Quote
     )
-    bidders: list["Bidder"] | None = Relationship( # Renamed from competitors
+    bidders: Optional[list["Bidder"]] = Relationship( # Renamed from competitors
         back_populates="items", link_model=Bid
     )
 
@@ -139,7 +140,7 @@ class Supplier(SQLModel, table=True):
     phone: str | None = Field(default=None, unique=True)
     desc: str | None = Field(default=None)
 
-    items: list["Item"] | None = Relationship(
+    items: Optional[list["Item"]] = Relationship(
         back_populates="suppliers", link_model=Quote
     )
 
@@ -161,7 +162,7 @@ class Bidder(SQLModel, table=True): # Renamed class
     phone: str | None = Field(default=None, unique=True)
     desc: str | None = Field(default=None)
 
-    items: list["Item"] | None = Relationship(
+    items: Optional[list["Item"]] = Relationship(
         back_populates="bidders", link_model=Bid # Updated back_populates
     )
     bids_association: list["Bid"] = Relationship(back_populates="bidder") # New relationship
