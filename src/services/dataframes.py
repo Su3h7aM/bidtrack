@@ -22,7 +22,7 @@ def get_quotes_dataframe(
     """
     if not quotes_list:
         return pd.DataFrame(
-            columns=["nome_fornecedor", "preco_base", "data_criacao", "data_atualizacao", "notas"]
+            columns=["supplier_name", "price", "created_at", "update_at", "notes"]
         )
 
     quotes_df = pd.DataFrame([q.model_dump() for q in quotes_list])
@@ -68,39 +68,23 @@ def get_quotes_dataframe(
     
     # Select and reorder columns for consistency
     display_columns = [
-        "nome_fornecedor",
-        "preco_base", 
-        "frete",
-        "custos_adicionais",
-        "impostos", 
-        "margem", 
-        "preco_calculado", 
-        "data_criacao",
-        "data_atualizacao",
-        "notas",
+        "supplier_name", # Derived
+        "price", # Original: price (model) -> price (df)
+        "freight",
+        "additional_costs",
+        "taxes",
+        "margin",
+        "calculated_price", # Derived
+        "created_at", # Original: created_at (model) -> created_at (df)
+        "update_at",  # Original: update_at (model) -> update_at (df)
+        "notes",
         "id",
         "item_id",
-        "id_fornecedor",
+        "supplier_id", # Original: supplier_id (model) -> supplier_id (df)
     ]
     # Filter out columns not present in quotes_df to avoid KeyError
     # (e.g. if a quote_list was empty and columns were predefined differently)
     
-    # Rename columns to Portuguese
-    quotes_df.rename(columns={
-        "supplier_name": "nome_fornecedor",
-        "price": "preco_base",
-        "freight": "frete",
-        "additional_costs": "custos_adicionais",
-        "taxes": "impostos",
-        "margin": "margem",
-        "calculated_price": "preco_calculado",
-        "created_at": "data_criacao",
-        "update_at": "data_atualizacao",
-        "notes": "notas",
-        "supplier_id": "id_fornecedor",
-        # id and item_id remain the same
-    }, inplace=True)
-
     # Ensure all display_columns exist, adding them with pd.NA if not
     for col_name in display_columns:
         if col_name not in quotes_df.columns:
@@ -128,7 +112,7 @@ def get_bids_dataframe(
     """
     if not bids_list:
         return pd.DataFrame(
-            columns=["nome_licitante", "preco", "data_criacao", "notas", "data_atualizacao"] # Renamed column
+            columns=["bidder_name", "price", "created_at", "notes", "update_at"]
         )
 
     bids_df = pd.DataFrame([b.model_dump() for b in bids_list])
@@ -166,29 +150,17 @@ def get_bids_dataframe(
     # Select and reorder columns for consistency
     # Note: 'bidding_id' is also part of Bid model, include if needed for other purposes
     display_columns = [
-        "nome_licitante", 
-        "preco",
-        "data_criacao",
-        "notas",
-        "data_atualizacao",
+        "bidder_name", # Derived
+        "price",
+        "created_at",
+        "update_at",
+        "notes",
         "id",
         "item_id",
-        "id_licitacao",
-        "id_licitante", 
+        "bidding_id", # Original: bidding_id (model) -> bidding_id (df)
+        "bidder_id",  # Original: bidder_id (model) -> bidder_id (df)
     ]
     # Filter out columns not present in bids_df to avoid KeyError
-
-    # Rename columns to Portuguese
-    bids_df.rename(columns={
-        "bidder_name": "nome_licitante",
-        "price": "preco",
-        "created_at": "data_criacao",
-        "notes": "notas",
-        "update_at": "data_atualizacao",
-        "bidding_id": "id_licitacao",
-        "bidder_id": "id_licitante",
-        # id and item_id remain the same
-    }, inplace=True)
 
     # Ensure all display_columns exist, adding them with pd.NA if not
     for col_name in display_columns:

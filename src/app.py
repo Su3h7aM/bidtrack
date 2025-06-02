@@ -449,28 +449,40 @@ if st.session_state.selected_item_id is not None:
                     st.markdown("##### Orçamentos Recebidos")
                     if not quotes_for_item_df_display.empty:
                         # Columns to display, matching those returned by get_quotes_dataframe
-                        display_cols_quotes = [
-                            "nome_fornecedor",
-                            "preco_base", 
-                            "frete",
-                            "custos_adicionais",
-                            "impostos", 
-                            "margem", 
-                            "preco_calculado", 
-                            "data_criacao",
-                            "data_atualizacao", 
-                            "notas",
+                        display_cols_quotes = [ # English internal names for selection
+                            "supplier_name", 
+                            "price", 
+                            "freight", 
+                            "additional_costs",
+                            "taxes", 
+                            "margin", 
+                            "calculated_price", 
+                            "notes",
                         ]
                         # Filter for existing columns to prevent KeyErrors if some are missing
+                        # This list (final_display_cols_quotes) will contain English names
                         final_display_cols_quotes = [
                             col
                             for col in display_cols_quotes
-                            if col in quotes_for_item_df_display.columns
+                            if col in quotes_for_item_df_display.columns 
                         ]
+                        # Keys are English internal names, labels are Portuguese for UI
+                        column_config_quotes = {
+                            "supplier_name": st.column_config.TextColumn(label="Nome do Fornecedor"),
+                            "price": st.column_config.NumberColumn(label="Preço Base", format="R$ %.2f"),
+                            "freight": st.column_config.NumberColumn(label="Frete", format="R$ %.2f"),
+                            "additional_costs": st.column_config.NumberColumn(label="Custos Adicionais", format="R$ %.2f"),
+                            "taxes": st.column_config.NumberColumn(label="Impostos (%)", format="%.2f%%"),
+                            "margin": st.column_config.NumberColumn(label="Margem (%)", format="%.2f%%"),
+                            "calculated_price": st.column_config.NumberColumn(label="Preço Calculado", format="R$ %.2f"),
+                            "notes": st.column_config.TextColumn(label="Notas"),
+                            # Date columns (created_at, update_at) are intentionally omitted from display_cols_quotes
+                        }
                         st.dataframe(
-                            quotes_for_item_df_display[final_display_cols_quotes],
+                            quotes_for_item_df_display[final_display_cols_quotes], # df has English cols, final_display_cols_quotes has English cols
                             hide_index=True,
                             use_container_width=True,
+                            column_config=column_config_quotes,
                         )
                     else:
                         st.info("Nenhum orçamento cadastrado para este item.")
@@ -478,23 +490,30 @@ if st.session_state.selected_item_id is not None:
                     st.markdown("##### Lances Recebidos")
                     if not bids_for_item_df_display.empty:
                         # Columns to display, matching those returned by get_bids_dataframe
-                        display_cols_bids = [
-                            "nome_licitante", 
-                            "preco",
-                            "data_criacao",
-                            "notas",
-                            "data_atualizacao",
+                        display_cols_bids = [ # English internal names for selection
+                            "bidder_name", 
+                            "price",
+                            "notes",
                         ]
                         # Filter for existing columns
+                        # This list (final_display_cols_bids) will contain English names
                         final_display_cols_bids = [
                             col
                             for col in display_cols_bids
                             if col in bids_for_item_df_display.columns
                         ]
+                        # Keys are English internal names, labels are Portuguese for UI
+                        column_config_bids = {
+                            "bidder_name": st.column_config.TextColumn(label="Nome do Licitante"),
+                            "price": st.column_config.NumberColumn(label="Preço Ofertado", format="R$ %.2f"),
+                            "notes": st.column_config.TextColumn(label="Notas"),
+                            # Date columns (created_at, update_at) are intentionally omitted from display_cols_bids
+                        }
                         st.dataframe(
-                            bids_for_item_df_display[final_display_cols_bids],
+                            bids_for_item_df_display[final_display_cols_bids], # df has English cols, final_display_cols_bids has English cols
                             hide_index=True,
                             use_container_width=True,
+                            column_config=column_config_bids,
                         )
                     else:
                         st.info("Nenhum lance cadastrado para este item.")
@@ -505,7 +524,7 @@ if st.session_state.selected_item_id is not None:
                 with graph_cols_display[0]:
                     if (
                         not quotes_for_item_df_display.empty
-                        # Ensure 'calculated_price' is used for the main plot as well, matching create_quotes_figure
+                        # Checks now use English column names, as DataFrame has English columns
                         and "calculated_price" in quotes_for_item_df_display.columns 
                         and "supplier_name" in quotes_for_item_df_display.columns
                     ):
@@ -518,13 +537,14 @@ if st.session_state.selected_item_id is not None:
                 with graph_cols_display[1]:
                     if (
                         not bids_for_item_df_display.empty
+                        # Checks now use English column names
                         and "price" in bids_for_item_df_display.columns
-                        and "bidder_name" in bids_for_item_df_display.columns # Renamed column
+                        and "bidder_name" in bids_for_item_df_display.columns 
                     ):
                         min_quote_price_val = ( 
-                            quotes_for_item_df_display["calculated_price"].min() 
+                            quotes_for_item_df_display["calculated_price"].min() # Use English name
                             if not quotes_for_item_df_display.empty
-                            and "calculated_price" in quotes_for_item_df_display.columns # Ensure column exists
+                            and "calculated_price" in quotes_for_item_df_display.columns # Use English name
                             else None
                         )
                         st.plotly_chart(
