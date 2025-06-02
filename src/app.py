@@ -157,7 +157,6 @@ if st.session_state.show_manage_bidding_dialog:
     is_open = manage_bidding_dialog_wrapper()
     if not is_open:
         st.session_state.show_manage_bidding_dialog = False
-        st.rerun() # Add rerun for immediate effect
 
 # --- Seleção de Item e Botão de Gerenciamento ---
 items_for_select = []
@@ -214,7 +213,6 @@ if st.session_state.show_manage_item_dialog:
         is_open = manage_item_dialog_wrapper()
         if not is_open:
             st.session_state.show_manage_item_dialog = False
-            st.rerun() # Add rerun
     else:
         st.session_state.show_manage_item_dialog = False
 
@@ -596,9 +594,7 @@ if st.session_state.get("show_manage_supplier_dialog", False):
     is_open = manage_supplier_dialog_wrapper()
     if not is_open:
         st.session_state.show_manage_supplier_dialog = False
-        st.rerun() # Add rerun
 if st.session_state.get("show_manage_bidder_dialog", False): # Renamed state variable
     is_open = manage_bidder_dialog_wrapper() # Renamed function call
     if not is_open:
         st.session_state.show_manage_bidder_dialog = False
-        st.rerun() # Add rerun
