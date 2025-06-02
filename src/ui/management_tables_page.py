@@ -684,33 +684,33 @@ def show_management_tables_view(bidding_repo, item_repo, supplier_repo, quote_re
                                 item_name = items_map.get(quote.item_id, "N/A")
                                 
                                 base_price = Decimal(str(quote.price)) if quote.price is not None else Decimal(0)
-                    freight = Decimal(str(quote.freight)) if quote.freight is not None else Decimal(0)
-                    additional_costs = Decimal(str(quote.additional_costs)) if quote.additional_costs is not None else Decimal(0)
-                    taxes_percentage = Decimal(str(quote.taxes)) if quote.taxes is not None else Decimal(0)
-                    margin_percentage = Decimal(str(quote.margin)) if quote.margin is not None else Decimal(0)
-                    
-                    price_with_freight_costs = base_price + freight + additional_costs
-                    taxes_value = price_with_freight_costs * (taxes_percentage / Decimal(100))
-                    price_before_margin = price_with_freight_costs + taxes_value
-                    margin_value = price_before_margin * (margin_percentage / Decimal(100))
-                    calculated_price = price_before_margin + margin_value
+                                freight = Decimal(str(quote.freight)) if quote.freight is not None else Decimal(0)
+                                additional_costs = Decimal(str(quote.additional_costs)) if quote.additional_costs is not None else Decimal(0)
+                                taxes_percentage = Decimal(str(quote.taxes)) if quote.taxes is not None else Decimal(0)
+                                margin_percentage = Decimal(str(quote.margin)) if quote.margin is not None else Decimal(0)
+                                
+                                price_with_freight_costs = base_price + freight + additional_costs
+                                taxes_value = price_with_freight_costs * (taxes_percentage / Decimal(100))
+                                price_before_margin = price_with_freight_costs + taxes_value
+                                margin_value = price_before_margin * (margin_percentage / Decimal(100))
+                                calculated_price = price_before_margin + margin_value
 
-                    quotes_data_for_display.append({
-                        "id": quote.id,
-                        "item_name": item_name,
-                        "supplier_name": supplier_name,
-                        "price": quote.price, # Base cost
-                        "freight": quote.freight,
-                        "additional_costs": quote.additional_costs,
-                        "taxes": quote.taxes, # Percentage
-                        "margin": quote.margin, # Percentage
-                        "calculated_price": calculated_price,
-                        "notes": quote.notes,
-                        "item_id": quote.item_id,
-                        "supplier_id": quote.supplier_id,
-                        "created_at": quote.created_at,
-                        "updated_at": quote.updated_at,
-                    })
+                                quotes_data_for_display.append({
+                                    "id": quote.id,
+                                    "item_name": item_name,
+                                    "supplier_name": supplier_name,
+                                    "price": quote.price, # Base cost
+                                    "freight": quote.freight,
+                                    "additional_costs": quote.additional_costs,
+                                    "taxes": quote.taxes, # Percentage
+                                    "margin": quote.margin, # Percentage
+                                    "calculated_price": calculated_price,
+                                    "notes": quote.notes,
+                                    "item_id": quote.item_id,
+                                    "supplier_id": quote.supplier_id,
+                                    "created_at": quote.created_at,
+                                    "updated_at": quote.updated_at,
+                                })
                 
                 df_quotes_built = pd.DataFrame(quotes_data_for_display)
                 if "created_at" in df_quotes_built.columns:
