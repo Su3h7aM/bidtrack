@@ -4,7 +4,7 @@ from datetime import datetime, time, date
 from typing import Any, cast
 
 # Models
-from db.models import Bidding, Item, Supplier, Competitor, Quote, Bid, BiddingMode
+from db.models import Bidding, Item, Supplier, Bidder, Quote, Bid, BiddingMode # Competitor -> Bidder
 
 # Repository type hint (still needed for parameters and module-level vars)
 from repository.sqlmodel import SQLModelRepository # Updated import for new location
@@ -15,7 +15,7 @@ from repository.sqlmodel import SQLModelRepository # Updated import for new loca
 _bidding_repo: SQLModelRepository[Bidding] | None = None
 _item_repo: SQLModelRepository[Item] | None = None
 _supplier_repo: SQLModelRepository[Supplier] | None = None
-_competitor_repo: SQLModelRepository[Competitor] | None = None
+_bidder_repo: SQLModelRepository[Bidder] | None = None # _competitor_repo -> _bidder_repo
 _quote_repo: SQLModelRepository[Quote] | None = None
 _bid_repo: SQLModelRepository[Bid] | None = None
 
@@ -184,7 +184,7 @@ def _save_entity_data(
     data_to_save = {
         k: v for k, v in form_data_submitted.items() if k in form_fields_config
     }
-    if entity_type in ["item", "supplier", "competitor"] and "description" in data_to_save:
+    if entity_type in ["item", "supplier", "bidder"] and "description" in data_to_save: # competitor -> bidder
         data_to_save["desc"] = data_to_save.pop("description")
 
     # Handle Bidding specific date/time combination
@@ -207,7 +207,7 @@ def _save_entity_data(
             if not is_required and field_type in ["text_input", "text_area"]:
                 # Determine the actual key in data_to_save (could have been aliased)
                 actual_key_in_data = field_name_from_config
-                if entity_type in ["item", "supplier", "competitor"] and field_name_from_config == "description":
+                if entity_type in ["item", "supplier", "bidder"] and field_name_from_config == "description": # competitor -> bidder
                     actual_key_in_data = "desc"
 
                 if actual_key_in_data in data_to_save and data_to_save[actual_key_in_data] == "":
@@ -339,7 +339,7 @@ def _manage_generic_dialog(
             # Populate 'data' dict from the fetched entity for the form
             for field_key, config_val in form_fields_config.items():
                 if isinstance(config_val, dict): # Ensure it's a field config
-                    model_attr = "desc" if field_key == "description" and entity_type in ["item", "supplier", "competitor"] else field_key
+                    model_attr = "desc" if field_key == "description" and entity_type in ["item", "supplier", "bidder"] else field_key # competitor -> bidder
 
                     if entity_type == "bidding" and field_key == "session_date":
                         data[field_key] = entity_to_edit.date.date() if hasattr(entity_to_edit, "date") and entity_to_edit.date else config_val.get("default")
@@ -398,15 +398,15 @@ def set_dialog_repositories(
     b_repo: SQLModelRepository[Bidding],
     i_repo: SQLModelRepository[Item],
     s_repo: SQLModelRepository[Supplier],
-    c_repo: SQLModelRepository[Competitor],
+    bd_repo: SQLModelRepository[Bidder], # c_repo -> bd_repo, Competitor -> Bidder
     q_repo: SQLModelRepository[Quote],
     bi_repo: SQLModelRepository[Bid],
 ):
-    global _bidding_repo, _item_repo, _supplier_repo, _competitor_repo, _quote_repo, _bid_repo
+    global _bidding_repo, _item_repo, _supplier_repo, _bidder_repo, _quote_repo, _bid_repo # _competitor_repo -> _bidder_repo
     _bidding_repo = b_repo
     _item_repo = i_repo
     _supplier_repo = s_repo
-    _competitor_repo = c_repo
+    _bidder_repo = bd_repo # _competitor_repo -> _bidder_repo, c_repo -> bd_repo
     _quote_repo = q_repo
     _bid_repo = bi_repo
 
@@ -472,24 +472,24 @@ def manage_supplier_dialog_wrapper():
     )
 
 
-@st.dialog("Gerenciar Concorrente", width="large")
-def manage_competitor_dialog_wrapper():
-    if not _competitor_repo or not _bid_repo:
-        st.error("Repositórios não configurados para o diálogo de concorrente.")
+@st.dialog("Gerenciar Licitante", width="large") # "Concorrente" -> "Licitante"
+def manage_bidder_dialog_wrapper(): # Renamed function
+    if not _bidder_repo or not _bid_repo: # _competitor_repo -> _bidder_repo
+        st.error("Repositórios não configurados para o diálogo de licitante.") # "concorrente" -> "licitante"
         if st.button("Fechar"): st.rerun()
         return
     _manage_generic_dialog(
-        "competitor",
-        _competitor_repo, # Pass the main repo for this entity type
+        "bidder", # "competitor" -> "bidder"
+        _bidder_repo, # _competitor_repo -> _bidder_repo
         contact_entity_form_config,
-        "Concorrente",
+        "Licitante", # "Concorrente" -> "Licitante"
         # related_repos argument removed
     )
 
 
 # Example of how repositories might be set from app.py after they are initialized:
 # from ui import dialogs
-# dialogs.set_dialog_repositories(bidding_repo, item_repo, supplier_repo, competitor_repo, quote_repo, bid_repo)
+# dialogs.set_dialog_repositories(bidding_repo, item_repo, supplier_repo, bidder_repo, quote_repo, bid_repo) # competitor_repo -> bidder_repo
 # This setup call would need to happen once before any dialog is invoked.
 # This also implies that the ui.dialogs module is imported in app.py.
 # The actual repo instances (bidding_repo, etc.) would come from db.database.py or similar.

@@ -1,6 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum as PyEnum
+from typing import Optional # Added import
 from sqlmodel import (
     Column,
     Enum,
@@ -26,10 +27,24 @@ class Quote(SQLModel, table=True):
     item_id: int | None = Field(foreign_key="item.id", nullable=False, ondelete="CASCADE")
     supplier_id: int | None = Field(foreign_key="supplier.id", nullable=False, ondelete="CASCADE")
 
-    price: Decimal = Field(
+    price: Decimal = Field( # This is the Custo do Produto
         sa_column=Column(Numeric(precision=20, scale=5, asdecimal=True))
     )
-    margin: float
+    # New fields
+    freight: Decimal | None = Field(
+        default=Decimal("0.00"),
+        sa_column=Column(Numeric(precision=20, scale=5, asdecimal=True), nullable=True)
+    )
+    additional_costs: Decimal | None = Field(
+        default=Decimal("0.00"),
+        sa_column=Column(Numeric(precision=20, scale=5, asdecimal=True), nullable=True)
+    )
+    taxes: Decimal | None = Field( # Percentage value, e.g., 6 for 6%
+        default=Decimal("0.00"),
+        sa_column=Column(Numeric(precision=5, scale=2, asdecimal=True), nullable=True) # Max 999.99%
+    )
+
+    margin: float # This might need re-evaluation or be calculated differently now
     notes: str | None = Field(default=None)
 
 
@@ -45,8 +60,10 @@ class Bid(SQLModel, table=True):
     )
 
     item_id: int | None = Field(foreign_key="item.id", nullable=False, ondelete="CASCADE")
-    competitor_id: int | None = Field(foreign_key="competitor.id", nullable=False, ondelete="CASCADE")
+    bidder_id: int | None = Field(default=None, foreign_key="bidder.id", nullable=True, ondelete="SET NULL") # Now optional
     bidding_id: int | None = Field(foreign_key="bidding.id", nullable=False, ondelete="CASCADE")
+
+    bidder: Optional["Bidder"] = Relationship(back_populates="bids") # Changed to bids
 
     notes: str | None = Field(default=None)
 
@@ -76,7 +93,7 @@ class Bidding(SQLModel, table=True):
     mode: BiddingMode = Field(sa_column=Column(Enum(BiddingMode)))
     process_number: str
 
-    items: list["Item"] | None = Relationship(back_populates="bidding", sa_relationship_kwargs={"cascade": "all, delete-orphan", "passive_deletes": True})
+    items: Optional[list["Item"]] = Relationship(back_populates="bidding", sa_relationship_kwargs={"cascade": "all, delete-orphan", "passive_deletes": True})
 
 
 class Item(SQLModel, table=True):
@@ -98,11 +115,11 @@ class Item(SQLModel, table=True):
     bidding_id: int | None = Field(foreign_key="bidding.id", nullable=False, ondelete="CASCADE")
 
     bidding: Bidding | None = Relationship(back_populates="items")
-    suppliers: list["Supplier"] | None = Relationship(
+    suppliers: Optional[list["Supplier"]] = Relationship(
         back_populates="items", link_model=Quote
     )
-    competitors: list["Competitor"] | None = Relationship(
-        back_populates="items", link_model=Bid
+    bidders: Optional[list["Bidder"]] = Relationship( 
+        back_populates="items", link_model=Bid, overlaps="bidder" # Added overlaps
     )
 
 
@@ -123,12 +140,12 @@ class Supplier(SQLModel, table=True):
     phone: str | None = Field(default=None, unique=True)
     desc: str | None = Field(default=None)
 
-    items: list["Item"] | None = Relationship(
+    items: Optional[list["Item"]] = Relationship(
         back_populates="suppliers", link_model=Quote
     )
 
 
-class Competitor(SQLModel, table=True):
+class Bidder(SQLModel, table=True): # Renamed class
     id: int | None = Field(default=None, primary_key=True)
 
     created_at: datetime | None = Field(
@@ -145,6 +162,7 @@ class Competitor(SQLModel, table=True):
     phone: str | None = Field(default=None, unique=True)
     desc: str | None = Field(default=None)
 
-    items: list["Item"] | None = Relationship(
-        back_populates="competitors", link_model=Bid
+    items: Optional[list["Item"]] = Relationship(
+        back_populates="bidders", link_model=Bid, overlaps="bidder" # Added overlaps
     )
+    bids: list["Bid"] = Relationship(back_populates="bidder", overlaps="items,bidders") # Renamed to bids
