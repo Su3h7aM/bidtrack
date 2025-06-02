@@ -601,38 +601,89 @@ def show_management_tables_view(bidding_repo, item_repo, supplier_repo, quote_re
 
     with tab_quotes:
         st.subheader("Gerenciar Orçamentos")
-        
-        # Step 1: Load raw data lists
-        quotes_list_raw = None
-        items_list_for_quotes_map = {}
-        suppliers_list_for_quotes_map = {}
-        error_loading_essential_data = False
 
+        # Step 1: Add Bidding Selection
+        all_biddings_for_quotes_tab = None
         try:
-            quotes_list_raw = quote_repo.get_all()
-            items_list = item_repo.get_all()
-            suppliers_list = supplier_repo.get_all()
-            
-            if items_list:
-                items_list_for_quotes_map = {item.id: item.name for item in items_list}
-            if suppliers_list:
-                suppliers_list_for_quotes_map = {supplier.id: supplier.name for supplier in suppliers_list}
-
+            all_biddings_for_quotes_tab = bidding_repo.get_all()
         except Exception as e:
-            st.error(f"Erro ao carregar dados brutos para Orçamentos: {e}")
-            error_loading_essential_data = True
+            st.error(f"Erro ao carregar Licitações para seleção: {e}")
+            all_biddings_for_quotes_tab = [] # Ensure it's an empty list on error to avoid further issues
 
-        if not error_loading_essential_data:
-            if not quotes_list_raw:
-                st.info("Nenhum orçamento cadastrado.")
+        if not all_biddings_for_quotes_tab:
+            st.info("Nenhuma licitação cadastrada para selecionar orçamentos.")
+        else:
+            bidding_options_map_quotes, bidding_option_ids_quotes = get_options_map(
+                data_list=all_biddings_for_quotes_tab,
+                extra_cols=["city", "process_number", "mode_value"],
+                default_message="Selecione uma Licitação para ver os orçamentos...",
+            )
+            selected_bidding_id_for_quotes = st.selectbox(
+                "Escolha uma Licitação para ver os orçamentos:",
+                options=bidding_option_ids_quotes,
+                format_func=lambda x: bidding_options_map_quotes.get(x, "Selecione..."),
+                key="select_bidding_for_quotes_tab",
+            )
+
+            if selected_bidding_id_for_quotes is None:
+                st.info("Por favor, selecione uma licitação.")
             else:
-                # Step 2: Build Initial DataFrame for display
-                quotes_data_for_display = []
-                for quote in quotes_list_raw:
-                    supplier_name = suppliers_list_for_quotes_map.get(quote.supplier_id, "N/A")
-                    item_name = items_list_for_quotes_map.get(quote.item_id, "N/A")
-                    
-                    base_price = Decimal(str(quote.price)) if quote.price is not None else Decimal(0)
+                # Step 2: Fetch Items for Selected Bidding
+                all_items_list = None
+                try:
+                    all_items_list = item_repo.get_all()
+                except Exception as e:
+                    st.error(f"Erro ao carregar itens para a licitação selecionada: {e}")
+                
+                if all_items_list is None:
+                    st.info("Não foi possível carregar os itens.") # Error already shown
+                else:
+                    items_for_selected_bidding = [
+                        item for item in all_items_list if item.bidding_id == selected_bidding_id_for_quotes
+                    ]
+                    if not items_for_selected_bidding:
+                        st.info("Nenhum item encontrado para esta licitação. Não é possível listar orçamentos.")
+                    else:
+                        item_ids_for_selected_bidding = {item.id for item in items_for_selected_bidding}
+
+                        # Step 3: Filter Quotes Based on Items of Selected Bidding
+                        all_quotes_list_raw = None
+                        try:
+                            all_quotes_list_raw = quote_repo.get_all()
+                        except Exception as e:
+                            st.error(f"Erro ao carregar orçamentos: {e}")
+
+                        if all_quotes_list_raw is None:
+                            st.info("Não foi possível carregar os orçamentos.") # Error already shown
+                        else:
+                            quotes_list_for_bidding = [
+                                quote for quote in all_quotes_list_raw if quote.item_id in item_ids_for_selected_bidding
+                            ]
+
+                            if not quotes_list_for_bidding:
+                                st.info("Nenhum orçamento cadastrado para os itens desta licitação.")
+                                # Subsequent logic will handle empty df_quotes_built if this list is empty
+                            
+                            # Load all suppliers and items once for mapping names - this can be outside the bidding selection conditional
+                            # if it's acceptable to fetch them even if no bidding is selected later.
+                            # For now, keeping it inside to only fetch if we proceed.
+                            items_list_for_map = all_items_list # Already fetched
+                            suppliers_list_for_map = None
+                            try:
+                                suppliers_list_for_map = supplier_repo.get_all()
+                            except Exception as e:
+                                st.error(f"Erro ao carregar fornecedores para mapeamento: {e}")
+                            
+                            items_map = {item.id: item.name for item in items_list_for_map} if items_list_for_map else {}
+                            suppliers_map = {sup.id: sup.name for sup in suppliers_list_for_map} if suppliers_list_for_map else {}
+
+                            # Step 4: Adapt Subsequent Logic - Build DataFrame from filtered quotes
+                            quotes_data_for_display = []
+                            for quote in quotes_list_for_bidding: # Use filtered list here
+                                supplier_name = suppliers_map.get(quote.supplier_id, "N/A")
+                                item_name = items_map.get(quote.item_id, "N/A")
+                                
+                                base_price = Decimal(str(quote.price)) if quote.price is not None else Decimal(0)
                     freight = Decimal(str(quote.freight)) if quote.freight is not None else Decimal(0)
                     additional_costs = Decimal(str(quote.additional_costs)) if quote.additional_costs is not None else Decimal(0)
                     taxes_percentage = Decimal(str(quote.taxes)) if quote.taxes is not None else Decimal(0)
@@ -798,36 +849,72 @@ def show_management_tables_view(bidding_repo, item_repo, supplier_repo, quote_re
     with tab_bids:
         st.subheader("Gerenciar Lances")
 
-        # Step 1: Load raw data lists
-        bids_list_raw = None
-        items_list_for_bids_map = {}
-        bidders_list_for_bids_map = {}
-        error_loading_bids_data = False
-        NO_BIDDER_DISPLAY_NAME = "Nenhum Licitante"
-
+        # Step 1: Add Bidding Selection
+        all_biddings_for_bids_tab = None
         try:
-            bids_list_raw = bid_repo.get_all()
-            items_list = item_repo.get_all()
-            bidders_list = bidder_repo.get_all()
-
-            if items_list:
-                items_list_for_bids_map = {item.id: item.name for item in items_list}
-            if bidders_list:
-                bidders_list_for_bids_map = {bidder.id: bidder.name for bidder in bidders_list}
+            all_biddings_for_bids_tab = bidding_repo.get_all()
         except Exception as e:
-            st.error(f"Erro ao carregar dados brutos para Lances: {e}")
-            error_loading_bids_data = True
+            st.error(f"Erro ao carregar Licitações para seleção: {e}")
+            all_biddings_for_bids_tab = [] 
 
-        if not error_loading_bids_data:
-            if not bids_list_raw:
-                st.info("Nenhum lance cadastrado.")
+        if not all_biddings_for_bids_tab:
+            st.info("Nenhuma licitação cadastrada para selecionar lances.")
+        else:
+            bidding_options_map_bids, bidding_option_ids_bids = get_options_map(
+                data_list=all_biddings_for_bids_tab,
+                extra_cols=["city", "process_number", "mode_value"],
+                default_message="Selecione uma Licitação para ver os lances...",
+            )
+            selected_bidding_id_for_bids = st.selectbox(
+                "Escolha uma Licitação para ver os lances:",
+                options=bidding_option_ids_bids,
+                format_func=lambda x: bidding_options_map_bids.get(x, "Selecione..."),
+                key="select_bidding_for_bids_tab",
+            )
+
+            if selected_bidding_id_for_bids is None:
+                st.info("Por favor, selecione uma licitação.")
             else:
-                # Step 2: Build Initial DataFrame for display
-                bids_data_for_display = []
-                for bid in bids_list_raw:
-                    bids_data_for_display.append({
-                        "id": bid.id,
-                        "item_name": items_list_for_bids_map.get(bid.item_id, "Item Desconhecido"),
+                # Step 2: Filter Bids Based on Selected Bidding
+                all_bids_list_raw = None
+                try:
+                    all_bids_list_raw = bid_repo.get_all()
+                except Exception as e:
+                    st.error(f"Erro ao carregar lances: {e}")
+                
+                if all_bids_list_raw is None:
+                    st.info("Não foi possível carregar os lances.")
+                else:
+                    bids_list_for_selected_bidding = [
+                        bid for bid in all_bids_list_raw if bid.bidding_id == selected_bidding_id_for_bids
+                    ]
+
+                    if not bids_list_for_selected_bidding:
+                        st.info("Nenhum lance cadastrado para esta licitação.")
+                    # Continue processing even if bids_list_for_selected_bidding is empty, 
+                    # to allow search and editor to show "no data" correctly.
+
+                    # Load items and bidders for name mapping (can be done once)
+                    items_list_for_bids_map = {}
+                    bidders_list_for_bids_map = {}
+                    NO_BIDDER_DISPLAY_NAME = "Nenhum Licitante"
+                    try:
+                        items_list = item_repo.get_all()
+                        bidders_list = bidder_repo.get_all()
+                        if items_list:
+                            items_list_for_bids_map = {item.id: item.name for item in items_list}
+                        if bidders_list:
+                            bidders_list_for_bids_map = {bidder.id: bidder.name for bidder in bidders_list}
+                    except Exception as e:
+                        st.error(f"Erro ao carregar itens/licitantes para mapeamento de nomes: {e}")
+                        # Proceed with empty maps if loading fails, names will be 'N/A' or IDs
+
+                    # Step 3: Adapt Subsequent Logic - Build DataFrame from filtered bids
+                    bids_data_for_display = []
+                    for bid in bids_list_for_selected_bidding: # Use filtered list
+                        bids_data_for_display.append({
+                            "id": bid.id,
+                            "item_name": items_list_for_bids_map.get(bid.item_id, "Item Desconhecido"),
                         "bidder_name": bidders_list_for_bids_map.get(bid.bidder_id, NO_BIDDER_DISPLAY_NAME) if bid.bidder_id else NO_BIDDER_DISPLAY_NAME,
                         "price": bid.price,
                         "notes": bid.notes,
