@@ -433,9 +433,14 @@ def show_management_tables_view(bidding_repo, item_repo, supplier_repo, quote_re
             st.info("Nenhuma licitação cadastrada para selecionar e listar itens.")
             # return # Stop if no biddings to select from
         else:
+            # Pre-process biddings to add mode_value_display
+            if all_biddings_for_item_tab:
+                for bidding_obj in all_biddings_for_item_tab:
+                    bidding_obj.mode_value_display = bidding_obj.mode.value if bidding_obj.mode else "N/A"
+
             bidding_options_map, bidding_option_ids = get_options_map(
-                data_list=all_biddings_for_item_tab,
-                extra_cols=["city", "process_number", "mode_value"],
+                data_list=all_biddings_for_item_tab, # Now contains the added attribute
+                extra_cols=["city", "process_number", "mode_value_display"], # Use the new attribute
                 default_message="Selecione uma Licitação para ver seus itens...",
             )
             selected_bidding_id_for_items = st.selectbox(
@@ -613,9 +618,14 @@ def show_management_tables_view(bidding_repo, item_repo, supplier_repo, quote_re
         if not all_biddings_for_quotes_tab:
             st.info("Nenhuma licitação cadastrada para selecionar orçamentos.")
         else:
+            # Pre-process biddings to add mode_value_display
+            if all_biddings_for_quotes_tab:
+                for bidding_obj in all_biddings_for_quotes_tab:
+                    bidding_obj.mode_value_display = bidding_obj.mode.value if bidding_obj.mode else "N/A"
+            
             bidding_options_map_quotes, bidding_option_ids_quotes = get_options_map(
-                data_list=all_biddings_for_quotes_tab,
-                extra_cols=["city", "process_number", "mode_value"],
+                data_list=all_biddings_for_quotes_tab, # Now contains the added attribute
+                extra_cols=["city", "process_number", "mode_value_display"], # Use the new attribute
                 default_message="Selecione uma Licitação para ver os orçamentos...",
             )
             selected_bidding_id_for_quotes = st.selectbox(
@@ -860,9 +870,14 @@ def show_management_tables_view(bidding_repo, item_repo, supplier_repo, quote_re
         if not all_biddings_for_bids_tab:
             st.info("Nenhuma licitação cadastrada para selecionar lances.")
         else:
+            # Pre-process biddings to add mode_value_display
+            if all_biddings_for_bids_tab:
+                for bidding_obj in all_biddings_for_bids_tab:
+                    bidding_obj.mode_value_display = bidding_obj.mode.value if bidding_obj.mode else "N/A"
+
             bidding_options_map_bids, bidding_option_ids_bids = get_options_map(
-                data_list=all_biddings_for_bids_tab,
-                extra_cols=["city", "process_number", "mode_value"],
+                data_list=all_biddings_for_bids_tab, # Now contains the added attribute
+                extra_cols=["city", "process_number", "mode_value_display"], # Use the new attribute
                 default_message="Selecione uma Licitação para ver os lances...",
             )
             selected_bidding_id_for_bids = st.selectbox(
