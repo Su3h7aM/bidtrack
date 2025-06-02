@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, time, date # Ensure date is also imported
-from typing import Any, Dict
+from typing import Any
 
 # Assuming repository instances are defined in app.py or a similar accessible module
 # This will likely need adjustment in a later step to avoid circular dependencies
@@ -47,9 +47,9 @@ contact_entity_form_config = {
 # --- Helper Functions for _manage_generic_dialog ---
 
 def _render_form_fields(
-    form_fields_config: Dict[str, Dict[str, Any]],
-    current_data: Dict[str, Any]
-) -> Dict[str, Any]:
+    form_fields_config: dict[str, dict[str, Any]],
+    current_data: dict[str, Any]
+) -> dict[str, Any]:
     """Renders form fields based on configuration and current data."""
     form_data_submitted = {}
     for field, config in form_fields_config.items():
@@ -99,8 +99,8 @@ def _render_form_fields(
 def _save_entity_data(
     entity_type: str,
     repo: SQLModelRepository,
-    form_data_submitted: Dict[str, Any],
-    form_fields_config: Dict[str, Dict[str, Any]],
+    form_data_submitted: dict[str, Any],
+    form_fields_config: dict[str, dict[str, Any]],
     dialog_mode: str,
     editing_id: Any = None,
     parent_id_field_name: str = None,
@@ -178,8 +178,8 @@ def _handle_entity_deletion(
     entity_type: str,
     repo: SQLModelRepository,
     editing_id: Any,
-    entity_data: Dict[str, Any], # To get name for display
-    related_entities_to_delete_config: Dict[str, SQLModelRepository], # e.g. {"items": item_repo, "quotes": quote_repo}
+    entity_data: dict[str, Any], # To get name for display
+    related_entities_to_delete_config: dict[str, SQLModelRepository], # e.g. {"items": item_repo, "quotes": quote_repo}
     title_singular: str
 ) -> bool:
     """Handles entity deletion including related entities. Returns True on success."""
@@ -267,7 +267,7 @@ def _manage_generic_dialog(
     form_fields_config: dict,
     title_singular: str,
     # This now takes a dictionary of actual repo instances needed for deletion
-    related_repos: Dict[str, SQLModelRepository] = None,
+    related_repos: dict[str, SQLModelRepository] = None,
     parent_id_field_name: str = None,
     parent_id_value: any = None
 ):

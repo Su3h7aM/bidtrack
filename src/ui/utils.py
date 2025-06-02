@@ -1,12 +1,12 @@
-from typing import List, Dict, Tuple, Any # For type hinting
+from typing import Any # For type hinting
 
 # --- Funções Auxiliares para Selectbox ---
-def get_options_map(data_list: List, name_col: str = 'name', extra_cols: List[str] = None, default_message:str = "Selecione...") -> Tuple[Dict[Any, str], List[Any]]:
+def get_options_map(data_list: list, name_col: str = 'name', extra_cols: list[str] = None, default_message:str = "Selecione...") -> tuple[dict[Any, str], list[Any]]:
     if not data_list:
         return {None: default_message}, [None]
 
-    options_map: Dict[Any, str] = {None: default_message}
-    ids_list: List[Any] = [None]
+    options_map: dict[Any, str] = {None: default_message}
+    ids_list: list[Any] = [None]
 
     for row in data_list:
         row_id = getattr(row, 'id', None) # Ensure row has id

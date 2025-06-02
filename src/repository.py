@@ -14,7 +14,7 @@ class Repository[T](ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def get_all(self) -> list[T] | None:
+    def get_all(self) -> list[T]:
         raise NotImplementedError
 
     @abstractmethod
@@ -57,6 +57,15 @@ class SQLModelRepository[T](Repository[T]):
     def add(self, item: T) -> T: # Changed return type to T
         # Use a context manager for session once session management is refined
         current_session = self.session
+
+        # Ensure ID and timestamps are managed by the database for new records
+        if hasattr(item, 'id'):
+            item.id = None
+        if hasattr(item, 'created_at'):
+            item.created_at = None
+        if hasattr(item, 'updated_at'):
+            item.updated_at = None
+
         current_session.add(item)
         current_session.commit()
         current_session.refresh(item)
@@ -67,7 +76,7 @@ class SQLModelRepository[T](Repository[T]):
         return self.session.get(self.model, id)
 
     @override
-    def get_all(self) -> list[T] | None:
+    def get_all(self) -> list[T]:
         statement = select(self.model)
         all_items = self.session.exec(statement).all()
         return list(all_items)
@@ -77,7 +86,12 @@ class SQLModelRepository[T](Repository[T]):
         current_session = self.session
         db_item = current_session.get(self.model, item_id)
         if db_item:
-            for key, value in data_to_update.items():
+            # Exclude 'id', 'created_at', and 'updated_at' from data_to_update
+            filtered_data = {
+                k: v for k, v in data_to_update.items()
+                if k not in ['id', 'created_at', 'updated_at']
+            }
+            for key, value in filtered_data.items():
                 if hasattr(db_item, key): # Ensure the attribute exists
                     setattr(db_item, key, value)
             current_session.add(db_item) # Re-adding is often good practice

@@ -4,6 +4,16 @@ import pandas as pd
 from db.models import Bidding, Item, Supplier, Competitor, Quote, Bid # Added BiddingMode as it's used by Bidding
 from repository import SQLModelRepository
 from services.dataframes import get_quotes_dataframe, get_bids_dataframe
+from state import initialize_session_state
+from services.plotting import create_quotes_figure, create_bids_figure
+from ui.utils import get_options_map
+from ui.dialogs import (
+    manage_bidding_dialog_wrapper,
+    manage_item_dialog_wrapper,
+    manage_supplier_dialog_wrapper,
+    manage_competitor_dialog_wrapper,
+    set_dialog_repositories # To pass repo instances
+)
 
 # --- Database Repository Instances ---
 db_url = "sqlite:///data/bidtrack.db" # Define the database URL
@@ -23,19 +33,7 @@ DEFAULT_COMPETITOR_SELECT_MESSAGE = "Selecione ou Cadastre um Concorrente..."
 APP_TITLE = "📊 Sistema Integrado de Licitações"
 
 # --- Initialize Session State ---
-from state import initialize_session_state
 initialize_session_state()
-
-# --- Imports from UI module ---
-from services.plotting import create_quotes_figure, create_bids_figure
-from ui.utils import get_options_map
-from ui.dialogs import (
-    manage_bidding_dialog_wrapper,
-    manage_item_dialog_wrapper,
-    manage_supplier_dialog_wrapper,
-    manage_competitor_dialog_wrapper,
-    set_dialog_repositories # To pass repo instances
-)
 
 # Initialize dialog repositories
 # This needs to be called once after repositories are initialized.
@@ -52,7 +50,6 @@ st.title(APP_TITLE)
 # --- Seleção de Licitação e Botão de Gerenciamento ---
 col_bid_select, col_bid_manage_btn = st.columns([5, 2], vertical_alignment="bottom")
 all_biddings = bidding_repo.get_all()
-if all_biddings is None: all_biddings = []
 bidding_options_map, bidding_option_ids = get_options_map(data_list=all_biddings, extra_cols=['process_number', 'city', 'mode'], default_message=DEFAULT_BIDDING_SELECT_MESSAGE)
 
 with col_bid_select:
@@ -81,7 +78,6 @@ if st.session_state.selected_bidding_id is not None:
     col_item_select, col_item_manage_btn = st.columns([5, 2], vertical_alignment="bottom")
 
     all_items = item_repo.get_all()
-    if all_items is None: all_items = []
     items_for_select = [item for item in all_items if item.bidding_id == st.session_state.selected_bidding_id]
     item_options_map, item_option_ids = get_options_map(data_list=items_for_select, name_col='name', default_message=DEFAULT_ITEM_SELECT_MESSAGE)
 
@@ -124,7 +120,6 @@ if st.session_state.selected_item_id is not None:
                     with st.expander(f"➕ Adicionar Novo Orçamento para {current_item_details.name}", expanded=False):
                         col_supp_select, col_supp_manage = st.columns([3,2], vertical_alignment="bottom")
                         all_suppliers = supplier_repo.get_all()
-                        if all_suppliers is None: all_suppliers = []
                         supplier_options_map, supplier_option_ids = get_options_map(data_list=all_suppliers, default_message=DEFAULT_SUPPLIER_SELECT_MESSAGE)
                         with col_supp_select:
                             selected_supplier_id_quote = st.selectbox("Fornecedor*:", options=supplier_option_ids, format_func=lambda x: supplier_options_map.get(x, DEFAULT_SUPPLIER_SELECT_MESSAGE), key="sb_supplier_quote_exp")
@@ -155,7 +150,6 @@ if st.session_state.selected_item_id is not None:
                     with st.expander(f"➕ Adicionar Novo Lance para {current_item_details.name}", expanded=False):
                         col_comp_select, col_comp_manage = st.columns([3,2], vertical_alignment="bottom")
                         all_competitors = competitor_repo.get_all()
-                        if all_competitors is None: all_competitors = []
                         competitor_options_map, competitor_option_ids = get_options_map(data_list=all_competitors, default_message=DEFAULT_COMPETITOR_SELECT_MESSAGE)
                         with col_comp_select:
                             selected_competitor_id_bid = st.selectbox("Concorrente*:", options=competitor_option_ids, format_func=lambda x: competitor_options_map.get(x, DEFAULT_COMPETITOR_SELECT_MESSAGE), key="sb_competitor_bid_exp")
@@ -183,18 +177,14 @@ if st.session_state.selected_item_id is not None:
                                 else: st.error("Selecione um item, um concorrente, certifique-se que o item tem `bidding_id` e insira um preço válido.")
 
                 all_quotes = quote_repo.get_all()
-                if all_quotes is None: all_quotes = []
                 quotes_for_item_list = [q for q in all_quotes if q.item_id == st.session_state.selected_item_id]
 
                 all_bids = bid_repo.get_all()
-                if all_bids is None: all_bids = []
                 bids_for_item_list = [b for b in all_bids if b.item_id == st.session_state.selected_item_id]
 
                 # Use the new data processing functions
                 all_suppliers = supplier_repo.get_all() # Ensure all_suppliers is defined
-                if all_suppliers is None: all_suppliers = []
                 all_competitors = competitor_repo.get_all() # Ensure all_competitors is defined
-                if all_competitors is None: all_competitors = []
 
                 quotes_for_item_df_display = get_quotes_dataframe(quotes_for_item_list, all_suppliers)
                 bids_for_item_df_display = get_bids_dataframe(bids_for_item_list, all_competitors)

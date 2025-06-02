@@ -1,8 +1,7 @@
 import pandas as pd
-from typing import List, Optional
 from db.models import Quote, Bid, Supplier, Competitor # Assuming models are accessible like this
 
-def get_quotes_dataframe(quotes_list: List[Quote], suppliers_list: List[Supplier]) -> pd.DataFrame:
+def get_quotes_dataframe(quotes_list: list[Quote], suppliers_list: list[Supplier]) -> pd.DataFrame:
     """
     Creates and preprocesses a DataFrame for quotes.
 
@@ -40,7 +39,7 @@ def get_quotes_dataframe(quotes_list: List[Quote], suppliers_list: List[Supplier
 
     return quotes_df
 
-def get_bids_dataframe(bids_list: List[Bid], competitors_list: List[Competitor]) -> pd.DataFrame:
+def get_bids_dataframe(bids_list: list[Bid], competitors_list: list[Competitor]) -> pd.DataFrame:
     """
     Creates and preprocesses a DataFrame for bids.
 

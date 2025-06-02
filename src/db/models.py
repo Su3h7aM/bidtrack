@@ -18,7 +18,7 @@ class Quote(SQLModel, table=True):
     created_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime, default=datetime.now())
     )
-    update_at: datetime | None = Field(
+    updated_at: datetime | None = Field(
         default=None,
         sa_column=Column(DateTime, default=datetime.now(), onupdate=datetime.now()),
     )
@@ -39,7 +39,7 @@ class Bid(SQLModel, table=True):
     created_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime, default=datetime.now())
     )
-    update_at: datetime | None = Field(
+    updated_at: datetime | None = Field(
         default=None,
         sa_column=Column(DateTime, default=datetime.now(), onupdate=datetime.now()),
     )
@@ -66,7 +66,7 @@ class Bidding(SQLModel, table=True):
     created_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime, default=datetime.now())
     )
-    update_at: datetime | None = Field(
+    updated_at: datetime | None = Field(
         default=None,
         sa_column=Column(DateTime, default=datetime.now(), onupdate=datetime.now()),
     )
@@ -85,7 +85,7 @@ class Item(SQLModel, table=True):
     created_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime, default=datetime.now())
     )
-    update_at: datetime | None = Field(
+    updated_at: datetime | None = Field(
         default=None,
         sa_column=Column(DateTime, default=datetime.now(), onupdate=datetime.now()),
     )
@@ -112,7 +112,7 @@ class Supplier(SQLModel, table=True):
     created_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime, default=datetime.now())
     )
-    update_at: datetime | None = Field(
+    updated_at: datetime | None = Field(
         default=None,
         sa_column=Column(DateTime, default=datetime.now(), onupdate=datetime.now()),
     )
@@ -134,7 +134,7 @@ class Competitor(SQLModel, table=True):
     created_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime, default=datetime.now())
     )
-    update_at: datetime | None = Field(
+    updated_at: datetime | None = Field(
         default=None,
         sa_column=Column(DateTime, default=datetime.now(), onupdate=datetime.now()),
     )
