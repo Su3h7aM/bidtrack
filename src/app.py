@@ -239,6 +239,7 @@ if st.session_state.selected_item_id is not None:
                     f"**Quantidade:** {current_item_details.quantity} {current_item_details.unit}"
                 )
 
+                st.subheader("Orçamentos e Lances")
                 expander_cols = st.columns(2)
                 with expander_cols[0]:
                     with st.expander(
@@ -469,7 +470,6 @@ if st.session_state.selected_item_id is not None:
                     bids_for_item_list, all_bidders # Renamed variable
                 )
 
-                st.subheader("Orçamentos e Lances")
                 table_cols_display = st.columns(2)
                 with table_cols_display[0]:
                     if not quotes_for_item_df_display.empty:
