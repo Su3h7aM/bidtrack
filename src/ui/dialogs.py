@@ -199,13 +199,19 @@ def _save_entity_data(
             data_to_save["date"] = None
 
     # Generic conversion of empty strings to None for optional text fields
-    for field_name, field_config in form_fields_config.items():
+    for field_name_from_config, field_config in form_fields_config.items():
         if isinstance(field_config, dict):  # Ensure it's a field configuration
             is_required = field_config.get("required", False)
             field_type = field_config.get("type", "")
+
             if not is_required and field_type in ["text_input", "text_area"]:
-                if field_name in data_to_save and data_to_save[field_name] == "":
-                    data_to_save[field_name] = None
+                # Determine the actual key in data_to_save (could have been aliased)
+                actual_key_in_data = field_name_from_config
+                if entity_type in ["item", "supplier", "competitor"] and field_name_from_config == "description":
+                    actual_key_in_data = "desc"
+
+                if actual_key_in_data in data_to_save and data_to_save[actual_key_in_data] == "":
+                    data_to_save[actual_key_in_data] = None
 
     title_singular = form_fields_config.get("_title_singular", entity_type.capitalize())
 
