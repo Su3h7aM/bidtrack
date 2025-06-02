@@ -198,12 +198,14 @@ def _save_entity_data(
         else:
             data_to_save["date"] = None
 
-    # Convert empty strings to None for specific optional fields
-    if entity_type in ["supplier", "competitor"]:
-        fields_to_nullify_if_empty = ["website", "email", "phone", "desc"]
-        for field_name in fields_to_nullify_if_empty:
-            if field_name in data_to_save and data_to_save[field_name] == "":
-                data_to_save[field_name] = None
+    # Generic conversion of empty strings to None for optional text fields
+    for field_name, field_config in form_fields_config.items():
+        if isinstance(field_config, dict):  # Ensure it's a field configuration
+            is_required = field_config.get("required", False)
+            field_type = field_config.get("type", "")
+            if not is_required and field_type in ["text_input", "text_area"]:
+                if field_name in data_to_save and data_to_save[field_name] == "":
+                    data_to_save[field_name] = None
 
     title_singular = form_fields_config.get("_title_singular", entity_type.capitalize())
 
