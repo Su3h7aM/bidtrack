@@ -101,8 +101,14 @@ def get_quotes_dataframe(
         # id and item_id remain the same
     }, inplace=True)
 
-    final_columns = [col for col in display_columns if col in quotes_df.columns]
-    quotes_df = quotes_df[final_columns]
+    # Ensure all display_columns exist, adding them with pd.NA if not
+    for col_name in display_columns:
+        if col_name not in quotes_df.columns:
+            quotes_df[col_name] = pd.NA
+
+    # Ensure the DataFrame has all display_columns in the correct order
+    # and filters out any columns not in display_columns
+    quotes_df = quotes_df.reindex(columns=display_columns)
 
     return quotes_df
 
@@ -133,7 +139,7 @@ def get_bids_dataframe(
             bidder_map = {b.id: b.name for b in bidders_list}
             if "bidder_id" in bids_df.columns:
                 bids_df["bidder_name"] = bids_df["bidder_id"].map(bidder_map)
-                bids_df["bidder_name"].fillna("N/D", inplace=True)
+                bids_df["bidder_name"] = bids_df["bidder_name"].fillna("N/D")
             else:
                 # If bidder_id column does not exist, fill bidder_name with "N/D"
                 bids_df["bidder_name"] = "N/D"
@@ -184,7 +190,13 @@ def get_bids_dataframe(
         # id and item_id remain the same
     }, inplace=True)
 
-    final_columns = [col for col in display_columns if col in bids_df.columns]
-    bids_df = bids_df[final_columns]
+    # Ensure all display_columns exist, adding them with pd.NA if not
+    for col_name in display_columns:
+        if col_name not in bids_df.columns:
+            bids_df[col_name] = pd.NA
+
+    # Ensure the DataFrame has all display_columns in the correct order
+    # and filters out any columns not in display_columns
+    bids_df = bids_df.reindex(columns=display_columns)
 
     return bids_df
