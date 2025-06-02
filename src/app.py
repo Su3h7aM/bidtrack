@@ -11,7 +11,7 @@ from db.models import (
     Bid,
 )
 
-# from repository import SQLModelRepository # No longer needed for direct import here
+from repository import SQLModelRepository # Added back for repo instantiation and type hints
 from services import core as core_services # Import core services
 from services.dataframes import get_quotes_dataframe, get_bids_dataframe
 from state import initialize_session_state
