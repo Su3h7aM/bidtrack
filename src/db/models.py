@@ -59,8 +59,10 @@ class Bid(SQLModel, table=True):
     )
 
     item_id: int | None = Field(foreign_key="item.id", nullable=False, ondelete="CASCADE")
-    competitor_id: int | None = Field(foreign_key="competitor.id", nullable=False, ondelete="CASCADE")
+    bidder_id: int | None = Field(default=None, foreign_key="bidder.id", nullable=True, ondelete="SET NULL") # Now optional
     bidding_id: int | None = Field(foreign_key="bidding.id", nullable=False, ondelete="CASCADE")
+
+    bidder: "Bidder" | None = Relationship(back_populates="bids_association") 
 
     notes: str | None = Field(default=None)
 
@@ -115,7 +117,7 @@ class Item(SQLModel, table=True):
     suppliers: list["Supplier"] | None = Relationship(
         back_populates="items", link_model=Quote
     )
-    competitors: list["Competitor"] | None = Relationship(
+    bidders: list["Bidder"] | None = Relationship( # Renamed from competitors
         back_populates="items", link_model=Bid
     )
 
@@ -142,7 +144,7 @@ class Supplier(SQLModel, table=True):
     )
 
 
-class Competitor(SQLModel, table=True):
+class Bidder(SQLModel, table=True): # Renamed class
     id: int | None = Field(default=None, primary_key=True)
 
     created_at: datetime | None = Field(
@@ -160,5 +162,6 @@ class Competitor(SQLModel, table=True):
     desc: str | None = Field(default=None)
 
     items: list["Item"] | None = Relationship(
-        back_populates="competitors", link_model=Bid
+        back_populates="bidders", link_model=Bid # Updated back_populates
     )
+    bids_association: list["Bid"] = Relationship(back_populates="bidder") # New relationship

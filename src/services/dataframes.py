@@ -3,7 +3,7 @@ from db.models import (
     Quote,
     Bid,
     Supplier,
-    Competitor,
+    Bidder, # Renamed from Competitor
 )  # Assuming models are accessible like this
 
 
@@ -91,28 +91,34 @@ def get_quotes_dataframe(
 
 
 def get_bids_dataframe(
-    bids_list: list[Bid], competitors_list: list[Competitor]
+    bids_list: list[Bid], bidders_list: list[Bidder] # Renamed parameter
 ) -> pd.DataFrame:
     """
     Creates and preprocesses a DataFrame for bids.
 
     Args:
         bids_list: A list of Bid objects.
-        competitors_list: A list of Competitor objects.
+        bidders_list: A list of Bidder objects. # Renamed parameter
 
     Returns:
-        A pandas DataFrame with bid data, including competitor names and formatted dates.
+        A pandas DataFrame with bid data, including bidder names and formatted dates. # Updated docstring
     """
     if not bids_list:
         return pd.DataFrame(
-            columns=["competitor_name", "price", "created_at", "notes", "update_at"]
+            columns=["bidder_name", "price", "created_at", "notes", "update_at"] # Renamed column
         )
 
     bids_df = pd.DataFrame([b.model_dump() for b in bids_list])
 
-    if not bids_df.empty and competitors_list:
-        competitor_map = {c.id: c.name for c in competitors_list}
-        bids_df["competitor_name"] = bids_df["competitor_id"].map(competitor_map)
+    # Map bidder_id to bidder_name
+    if not bids_df.empty and bidders_list: # Ensure bidders_list is not empty
+        bidder_map = {b.id: b.name for b in bidders_list} # Renamed variable
+        # Ensure 'bidder_id' column exists from model_dump() before trying to map it
+        if "bidder_id" in bids_df.columns:
+            bids_df["bidder_name"] = bids_df["bidder_id"].map(bidder_map) 
+            bids_df["bidder_name"].fillna("N/D", inplace=True) # Handle None/NaN bidder_id cases
+        else:
+            bids_df["bidder_name"] = "N/D" # If bidder_id column itself is missing, fill all with N/D
 
     if "created_at" in bids_df.columns:
         bids_df["created_at"] = pd.to_datetime(bids_df["created_at"]).dt.strftime(
@@ -132,7 +138,7 @@ def get_bids_dataframe(
     # Select and reorder columns for consistency
     # Note: 'bidding_id' is also part of Bid model, include if needed for other purposes
     display_columns = [
-        "competitor_name",
+        "bidder_name", # Renamed column
         "price",
         "created_at",
         "notes",
@@ -140,7 +146,7 @@ def get_bids_dataframe(
         "id",
         "item_id",
         "bidding_id",
-        "competitor_id",
+        "bidder_id", # Renamed column
     ]
     # Filter out columns not present in bids_df to avoid KeyError
     final_columns = [col for col in display_columns if col in bids_df.columns]

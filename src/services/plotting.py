@@ -40,27 +40,27 @@ def create_bids_figure(
             b_df_sorted,
             x="created_at",
             y="price",
-            color="competitor_name",
+            color="bidder_name", # Renamed from competitor_name
             title="Evolução dos Lances ao Longo do Tempo",
             labels={
                 "created_at": "Momento do Lance",
                 "price": "Preço do Lance (R$)",
-                "competitor_name": "Concorrente",
+                "bidder_name": "Licitante", # Renamed key and value
             },
             markers=True,
         )
     else:
         fig = px.bar(
             bids_df_display,
-            x="competitor_name",
+            x="bidder_name", # Renamed from competitor_name
             y="price",
             title="Comparativo de Preços dos Lances (sem timestamp)",
-            labels={"competitor_name": "Concorrente", "price": "Preço do Lance (R$)"},
-            color="competitor_name",
+            labels={"bidder_name": "Licitante", "price": "Preço do Lance (R$)"}, # Renamed key and value
+            color="bidder_name", # Renamed from competitor_name
             text_auto=True,
         )
     fig.update_layout(
-        dragmode="pan", legend_title_text="Concorrentes", showlegend=False
+        dragmode="pan", legend_title_text="Licitantes", showlegend=False # Renamed legend title
     )  # Added showlegend=False
     if min_quote_price is not None:
         fig.add_hline(
