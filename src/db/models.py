@@ -23,8 +23,8 @@ class Quote(SQLModel, table=True):
         sa_column=Column(DateTime, default=datetime.now(), onupdate=datetime.now()),
     )
 
-    item_id: int | None = Field(foreign_key="item.id", nullable=False)
-    supplier_id: int | None = Field(foreign_key="supplier.id", nullable=False)
+    item_id: int | None = Field(foreign_key="item.id", nullable=False, ondelete="CASCADE")
+    supplier_id: int | None = Field(foreign_key="supplier.id", nullable=False, ondelete="CASCADE")
 
     price: Decimal = Field(
         sa_column=Column(Numeric(precision=20, scale=5, asdecimal=True))
@@ -44,9 +44,9 @@ class Bid(SQLModel, table=True):
         sa_column=Column(DateTime, default=datetime.now(), onupdate=datetime.now()),
     )
 
-    item_id: int | None = Field(foreign_key="item.id", nullable=False)
-    competitor_id: int | None = Field(foreign_key="competitor.id", nullable=False)
-    bidding_id: int | None = Field(foreign_key="bidding.id", nullable=False)
+    item_id: int | None = Field(foreign_key="item.id", nullable=False, ondelete="CASCADE")
+    competitor_id: int | None = Field(foreign_key="competitor.id", nullable=False, ondelete="CASCADE")
+    bidding_id: int | None = Field(foreign_key="bidding.id", nullable=False, ondelete="CASCADE")
 
     notes: str | None = Field(default=None)
 
@@ -76,7 +76,7 @@ class Bidding(SQLModel, table=True):
     mode: BiddingMode = Field(sa_column=Column(Enum(BiddingMode)))
     process_number: str
 
-    items: list["Item"] | None = Relationship(back_populates="bidding")
+    items: list["Item"] | None = Relationship(back_populates="bidding", sa_relationship_kwargs={"cascade": "all, delete-orphan", "passive_deletes": True})
 
 
 class Item(SQLModel, table=True):
@@ -95,7 +95,7 @@ class Item(SQLModel, table=True):
     unit: str | None = Field(default=None)
     quantity: float
 
-    bidding_id: int | None = Field(foreign_key="bidding.id", nullable=False)
+    bidding_id: int | None = Field(foreign_key="bidding.id", nullable=False, ondelete="CASCADE")
 
     bidding: Bidding | None = Relationship(back_populates="items")
     suppliers: list["Supplier"] | None = Relationship(

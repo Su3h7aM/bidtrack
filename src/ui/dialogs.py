@@ -3,9 +3,6 @@ import pandas as pd
 from datetime import datetime, time, date
 from typing import Any, cast
 
-# Core services
-from services import core as core_services
-
 # Models
 from db.models import Bidding, Item, Supplier, Competitor, Quote, Bid, BiddingMode
 
@@ -251,65 +248,28 @@ def _save_entity_data(
 
 def _handle_entity_deletion(
     entity_type: str,
+    repo: SQLModelRepository, # Primary repository for the entity being deleted
     editing_id: Any,
-    entity_data: dict[str, Any],  # To get name for display
-    # Repos needed by core delete functions are passed here
-    # These must align with what core_services.delete_<entity> expects
-    # For example, delete_bidding needs bidding_repo, item_repo, quote_repo, bid_repo
-    # These are now sourced from the module-level underscore prefixed variables
+    entity_name_display: str,
     title_singular: str,
 ) -> bool:
-    """Handles entity deletion by calling core services. Returns True on success."""
-    global _bidding_repo, _item_repo, _supplier_repo, _competitor_repo, _quote_repo, _bid_repo
+    """Handles entity deletion using direct repository call, relying on DB/ORM cascades."""
 
-    entity_name_display = entity_data.get("name", entity_data.get("process_number", str(editing_id)))
-
-    related_entity_names = []
-    if entity_type == "bidding":
-        related_entity_names = ["itens", "orçamentos dos itens", "lances dos itens"]
-    elif entity_type == "item":
-        related_entity_names = ["orçamentos", "lances"]
-    elif entity_type == "supplier":
-        related_entity_names = ["orçamentos"]
-    elif entity_type == "competitor":
-        related_entity_names = ["lances"]
-
-    warning_message = f"Tem certeza que deseja deletar {title_singular.lower()} '{entity_name_display}'?"
-    if related_entity_names:
-        warning_message += f" Todas as {', '.join(related_entity_names)} associadas também serão deletadas. Esta ação não pode ser desfeita."
-
+    warning_message = (
+        f"Tem certeza que deseja deletar {title_singular.lower()} '{entity_name_display}'? "
+        "Todas as informações relacionadas (itens, orçamentos, lances) serão automaticamente "
+        "deletadas devido às regras de cascata estabelecidas no banco de dados."
+    )
     st.warning(warning_message)
+
     confirm_cols_del = st.columns(2)
 
     if confirm_cols_del[0].button("🔴 Confirmar Exclusão", type="primary", key=f"confirm_del_btn_{entity_type}", use_container_width=True):
         try:
-            deletion_successful = False
-            if entity_type == "bidding":
-                if _bidding_repo and _item_repo and _quote_repo and _bid_repo:
-                    deletion_successful = core_services.delete_bidding(
-                        _bidding_repo, _item_repo, _quote_repo, _bid_repo, editing_id
-                    )
-            elif entity_type == "item":
-                if _item_repo and _quote_repo and _bid_repo: # Item repo is the primary repo for item itself
-                    deletion_successful = core_services.delete_item(
-                        _item_repo, _quote_repo, _bid_repo, editing_id
-                    )
-            elif entity_type == "supplier":
-                if _supplier_repo and _quote_repo:
-                    deletion_successful = core_services.delete_supplier(
-                        _supplier_repo, _quote_repo, editing_id
-                    )
-            elif entity_type == "competitor":
-                if _competitor_repo and _bid_repo:
-                    deletion_successful = core_services.delete_competitor(
-                        _competitor_repo, _bid_repo, editing_id
-                    )
-            else:
-                st.error(f"Tipo de entidade desconhecido para exclusão: {entity_type}")
-                return False
-
-            if deletion_successful:
-                st.success(f"{title_singular} '{entity_name_display}' e suas dependências foram deletados(as) com sucesso.")
+            if repo.delete(editing_id): # Assuming repo.delete returns True on success
+                st.success(
+                    f"{title_singular} '{entity_name_display}' e suas dependências foram deletados(as) com sucesso."
+                )
                 # Update session state for selections
                 if st.session_state.get(f"selected_{entity_type}_id") == editing_id:
                     st.session_state[f"selected_{entity_type}_id"] = None
@@ -318,15 +278,13 @@ def _handle_entity_deletion(
                     st.session_state.selected_item_id = None
                 if entity_type == "item" and st.session_state.get("selected_item_id") == editing_id:
                      st.session_state.selected_item_id = None
-                return True
+                return True # Deletion successful
             else:
-                # This part might be tricky if core_services.delete_x doesn't raise error but returns False
-                st.error(f"Falha ao deletar {title_singular} '{entity_name_display}'. A operação no serviço principal não foi bem sucedida ou a entidade não foi encontrada.")
+                st.error(f"Falha ao deletar {title_singular} '{entity_name_display}'. O item pode não existir mais ou a exclusão falhou no repositório.")
                 return False
-
         except Exception as e:
-            st.error(f"Erro ao deletar {title_singular} e/ou suas dependências: {e}")
-            return False
+            st.error(f"Erro ao deletar {title_singular}: {e}")
+            return False # Deletion failed
 
     if confirm_cols_del[1].button("Cancelar", key=f"cancel_del_btn_{entity_type}", use_container_width=True):
         st.session_state[f"confirm_delete_{entity_type}"] = False
@@ -412,17 +370,12 @@ def _manage_generic_dialog(
                     st.rerun() # Rerun to show confirmation dialog part
 
     if st.session_state.get(confirm_delete_key, False):
-        # Note: _handle_entity_deletion now uses module-level repos
-        if _handle_entity_deletion(entity_type, editing_id, data, title_singular):
+        entity_name_display = data.get("name", data.get("process_number", str(editing_id)))
+        if _handle_entity_deletion(entity_type, repo, editing_id, entity_name_display, title_singular):
             st.session_state[show_dialog_key] = False; st.session_state[editing_id_key] = None; st.session_state[confirm_delete_key] = False; st.rerun()
         else: # Deletion failed or cancelled
-            # If cancellation was by button click inside _handle_entity_deletion, it would have rerun.
-            # If it's a failure, we might want to keep the confirm_delete_key or dialog open.
-            # For now, let's assume failure means we keep the confirmation dialog part.
-            # If cancel button was clicked, confirm_delete_key is already False.
-            if st.session_state.get(confirm_delete_key): # if still true, means error happened, not cancellation
-                 st.session_state[show_dialog_key] = True # Keep main dialog open
-            # No direct rerun here to allow error messages from _handle_entity_deletion to show if it didn't rerun itself.
+            if st.session_state.get(confirm_delete_key):
+                 st.session_state[show_dialog_key] = True
 
     if st.button("Fechar Diálogo", key=f"close_dialog_btn_{entity_type}", use_container_width=True):
         st.session_state[show_dialog_key] = False; st.session_state[editing_id_key] = None; st.session_state[confirm_delete_key] = False; st.rerun()
