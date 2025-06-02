@@ -110,15 +110,20 @@ def get_bids_dataframe(
 
     bids_df = pd.DataFrame([b.model_dump() for b in bids_list])
 
-    # Map bidder_id to bidder_name
-    if not bids_df.empty and bidders_list: # Ensure bidders_list is not empty
-        bidder_map = {b.id: b.name for b in bidders_list} # Renamed variable
-        # Ensure 'bidder_id' column exists from model_dump() before trying to map it
-        if "bidder_id" in bids_df.columns:
-            bids_df["bidder_name"] = bids_df["bidder_id"].map(bidder_map) 
-            bids_df["bidder_name"].fillna("N/D", inplace=True) # Handle None/NaN bidder_id cases
+    # Ensure 'bidder_name' column is always present
+    if not bids_df.empty:
+        if bidders_list:  # Check if bidders_list is provided and not empty
+            bidder_map = {b.id: b.name for b in bidders_list}
+            if "bidder_id" in bids_df.columns:
+                bids_df["bidder_name"] = bids_df["bidder_id"].map(bidder_map)
+                bids_df["bidder_name"].fillna("N/D", inplace=True)
+            else:
+                # If bidder_id column does not exist, fill bidder_name with "N/D"
+                bids_df["bidder_name"] = "N/D"
         else:
-            bids_df["bidder_name"] = "N/D" # If bidder_id column itself is missing, fill all with N/D
+            # If bidders_list is empty or not provided, fill bidder_name with "N/D"
+            bids_df["bidder_name"] = "N/D"
+    # If bids_df is empty, the initial check for bids_list already handles returning a DataFrame with bidder_name
 
     if "created_at" in bids_df.columns:
         bids_df["created_at"] = pd.to_datetime(bids_df["created_at"]).dt.strftime(
