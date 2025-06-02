@@ -276,7 +276,7 @@ if st.session_state.selected_item_id is not None:
                                             supplier_id=selected_supplier_id_quote, # type: ignore
                                             price=Decimal(str(quote_price)), # Ensure price is Decimal
                                             margin=Decimal(str(quote_margin)), # Ensure margin is Decimal
-                                            notes=quote_notes,
+                                            notes=quote_notes if quote_notes else None,
                                             # created_at and updated_at will be handled by the model itself or DB defaults
                                         )
                                         added_quote = quote_repo.add(new_quote_instance) # Direct repository call
@@ -346,7 +346,7 @@ if st.session_state.selected_item_id is not None:
                                             bidding_id=current_item_details.bidding_id, # type: ignore
                                             competitor_id=selected_competitor_id_bid, # type: ignore
                                             price=Decimal(str(bid_price)), # Ensure price is Decimal
-                                            notes=bid_notes,
+                                            notes=bid_notes if bid_notes else None,
                                             # created_at and updated_at will be handled by the model itself or DB defaults
                                         )
                                         added_bid = bid_repo.add(new_bid_instance) # Direct repository call
