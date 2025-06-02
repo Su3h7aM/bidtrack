@@ -22,7 +22,7 @@ def get_quotes_dataframe(
     """
     if not quotes_list:
         return pd.DataFrame(
-            columns=["supplier_name", "price", "created_at", "update_at", "notes"]
+            columns=["nome_fornecedor", "preco_base", "data_criacao", "data_atualizacao", "notas"]
         )
 
     quotes_df = pd.DataFrame([q.model_dump() for q in quotes_list])
@@ -68,22 +68,39 @@ def get_quotes_dataframe(
     
     # Select and reorder columns for consistency
     display_columns = [
-        "supplier_name",
-        "price", # Base Product Cost
-        "freight",
-        "additional_costs",
-        "taxes", # Input tax %
-        "margin", # Input margin %
-        "calculated_price", # The new calculated selling price
-        "created_at",
-        "update_at",
-        "notes",
+        "nome_fornecedor",
+        "preco_base", 
+        "frete",
+        "custos_adicionais",
+        "impostos", 
+        "margem", 
+        "preco_calculado", 
+        "data_criacao",
+        "data_atualizacao",
+        "notas",
         "id",
         "item_id",
-        "supplier_id",
+        "id_fornecedor",
     ]
     # Filter out columns not present in quotes_df to avoid KeyError
     # (e.g. if a quote_list was empty and columns were predefined differently)
+    
+    # Rename columns to Portuguese
+    quotes_df.rename(columns={
+        "supplier_name": "nome_fornecedor",
+        "price": "preco_base",
+        "freight": "frete",
+        "additional_costs": "custos_adicionais",
+        "taxes": "impostos",
+        "margin": "margem",
+        "calculated_price": "preco_calculado",
+        "created_at": "data_criacao",
+        "update_at": "data_atualizacao",
+        "notes": "notas",
+        "supplier_id": "id_fornecedor",
+        # id and item_id remain the same
+    }, inplace=True)
+
     final_columns = [col for col in display_columns if col in quotes_df.columns]
     quotes_df = quotes_df[final_columns]
 
@@ -105,7 +122,7 @@ def get_bids_dataframe(
     """
     if not bids_list:
         return pd.DataFrame(
-            columns=["bidder_name", "price", "created_at", "notes", "update_at"] # Renamed column
+            columns=["nome_licitante", "preco", "data_criacao", "notas", "data_atualizacao"] # Renamed column
         )
 
     bids_df = pd.DataFrame([b.model_dump() for b in bids_list])
@@ -143,17 +160,30 @@ def get_bids_dataframe(
     # Select and reorder columns for consistency
     # Note: 'bidding_id' is also part of Bid model, include if needed for other purposes
     display_columns = [
-        "bidder_name", # Renamed column
-        "price",
-        "created_at",
-        "notes",
-        "update_at",
+        "nome_licitante", 
+        "preco",
+        "data_criacao",
+        "notas",
+        "data_atualizacao",
         "id",
         "item_id",
-        "bidding_id",
-        "bidder_id", # Renamed column
+        "id_licitacao",
+        "id_licitante", 
     ]
     # Filter out columns not present in bids_df to avoid KeyError
+
+    # Rename columns to Portuguese
+    bids_df.rename(columns={
+        "bidder_name": "nome_licitante",
+        "price": "preco",
+        "created_at": "data_criacao",
+        "notes": "notas",
+        "update_at": "data_atualizacao",
+        "bidding_id": "id_licitacao",
+        "bidder_id": "id_licitante",
+        # id and item_id remain the same
+    }, inplace=True)
+
     final_columns = [col for col in display_columns if col in bids_df.columns]
     bids_df = bids_df[final_columns]
 
