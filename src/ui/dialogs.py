@@ -50,6 +50,7 @@ bidding_form_config = {
 item_form_config = {
     "name": {"label": "Nome do Item*", "type": "text_input", "required": True},
     "description": {"label": "Descrição", "type": "text_area", "default": ""},
+    "code": {"label": "Código", "type": "text_input", "required": False, "default": ""},
     "quantity": {
         "label": "Quantidade*",
         "type": "number_input",
