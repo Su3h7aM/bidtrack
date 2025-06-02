@@ -569,4 +569,4 @@ st.title(APP_TITLE)
 if st.session_state.current_view == "Main View":
     show_main_view()
 elif st.session_state.current_view == "Management Tables":
-    show_management_tables_view()
+    show_management_tables_view(bidding_repo, item_repo, supplier_repo, quote_repo, bidder_repo, bid_repo)
