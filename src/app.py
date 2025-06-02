@@ -227,19 +227,17 @@ if st.session_state.selected_item_id is not None:
             ]
             if current_item_details_list:
                 current_item_details = current_item_details_list[0]
-                st.subheader("Detalhes do Item")
+                st.subheader("Detalhes")
                 item_code_display = current_item_details.code if current_item_details.code else "N/A"
                 st.markdown(f"**Código:** {item_code_display}")
                 # The "Item Selecionado: {item.name} (ID: {item.id})" line is removed.
                 # Display item name as part of the expander title for context.
                 # Consider adding Item Name here if it's deemed necessary for top-level info.
                 # For now, strictly following the "replace" instruction.
-                st.subheader("Descrição")
-                st.markdown(current_item_details.desc if current_item_details.desc else "N/A")
+                st.markdown(f"**Descrição:** {current_item_details.desc if current_item_details.desc else 'N/A'}")
                 st.markdown(
                     f"**Quantidade:** {current_item_details.quantity} {current_item_details.unit}"
                 )
-                st.markdown("---")
 
                 expander_cols = st.columns(2)
                 with expander_cols[0]:
@@ -471,9 +469,9 @@ if st.session_state.selected_item_id is not None:
                     bids_for_item_list, all_bidders # Renamed variable
                 )
 
+                st.subheader("Orçamentos e Lances")
                 table_cols_display = st.columns(2)
                 with table_cols_display[0]:
-                    st.subheader("Orçamentos Recebidos")
                     if not quotes_for_item_df_display.empty:
                         # Columns to display, matching those returned by get_quotes_dataframe
                         display_cols_quotes = [ # English internal names for selection
@@ -514,7 +512,6 @@ if st.session_state.selected_item_id is not None:
                     else:
                         st.info("Nenhum orçamento cadastrado para este item.")
                 with table_cols_display[1]:
-                    st.subheader("Lances Recebidos")
                     if not bids_for_item_df_display.empty:
                         # Columns to display, matching those returned by get_bids_dataframe
                         display_cols_bids = [ # English internal names for selection
@@ -545,8 +542,7 @@ if st.session_state.selected_item_id is not None:
                     else:
                         st.info("Nenhum lance cadastrado para este item.")
 
-                st.markdown("---")
-                st.subheader("Gráficos do Item")
+                st.subheader("Gráficos")
                 graph_cols_display = st.columns(2)
                 with graph_cols_display[0]:
                     if (
