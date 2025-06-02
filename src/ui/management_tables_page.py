@@ -24,11 +24,15 @@ def show_management_tables_view(bidding_repo, item_repo, supplier_repo, quote_re
 
     with tab_biddings:
         st.subheader("Gerenciar Licitações")
-        biddings_list = bidding_repo.get_all()
+        try:
+            biddings_list = bidding_repo.get_all()
+        except Exception as e:
+            st.error(f"Erro ao carregar dados de Licitações: {e}")
+            return
 
         if not biddings_list:
             st.info("Nenhuma licitação cadastrada.")
-            return # Keep other tabs accessible
+            return 
 
         # Convert to DataFrame
         df_biddings = pd.DataFrame([b.model_dump() for b in biddings_list])
@@ -53,14 +57,23 @@ def show_management_tables_view(bidding_repo, item_repo, supplier_repo, quote_re
 
 
         search_term = st.text_input("Buscar Licitações (por nº processo, cidade, modo):", key="search_licitacoes")
-        filtered_df_biddings = df_display_biddings
+        
+        unfiltered_df_biddings = df_display_biddings # Keep a reference before filtering
+        
         if search_term:
             search_term_lower = search_term.lower()
-            filtered_df_biddings = df_display_biddings[
-                df_display_biddings["process_number"].astype(str).str.lower().str.contains(search_term_lower) |
-                df_display_biddings["city"].astype(str).str.lower().str.contains(search_term_lower) |
-                df_display_biddings["mode_display"].astype(str).str.lower().str.contains(search_term_lower)
+            filtered_df_biddings = unfiltered_df_biddings[ # Filter from the unfiltered copy
+                unfiltered_df_biddings["process_number"].astype(str).str.lower().str.contains(search_term_lower) |
+                unfiltered_df_biddings["city"].astype(str).str.lower().str.contains(search_term_lower) |
+                unfiltered_df_biddings["mode_display"].astype(str).str.lower().str.contains(search_term_lower)
             ]
+        else:
+            filtered_df_biddings = unfiltered_df_biddings # Show all if no search term
+
+        if filtered_df_biddings.empty and not unfiltered_df_biddings.empty and search_term:
+            st.info("Nenhum resultado encontrado para sua busca em Licitações.")
+            # Optionally, you might want to return or not display the editor if the search yields nothing
+            # For now, we'll let it display an empty editor or handle as data_editor does.
 
         column_config_biddings = {
             "id": st.column_config.NumberColumn("ID", disabled=True),
@@ -119,25 +132,29 @@ def show_management_tables_view(bidding_repo, item_repo, supplier_repo, quote_re
                 if update_dict:
                     changes_found = True
                     try:
-                        # Map mode_display back to BiddingMode enum
                         if "mode_display" in update_dict:
-                            update_dict["mode"] = BiddingMode(update_dict.pop("mode_display"))
+                            try:
+                                mode_val = update_dict.pop("mode_display")
+                                update_dict["mode"] = BiddingMode(mode_val)
+                            except ValueError:
+                                st.error(f"Valor inválido para Modalidade ('{mode_val}') na Licitação ID {licitacao_id}. Alterações não salvas para esta linha.")
+                                continue # Skip this row
                         
-                        # Ensure date is datetime
                         if "date" in update_dict and isinstance(update_dict["date"], str):
-                            update_dict["date"] = pd.to_datetime(update_dict["date"])
+                            try:
+                                update_dict["date"] = pd.to_datetime(update_dict["date"])
+                            except ValueError:
+                                st.error(f"Data inválida ('{update_dict['date']}') na Licitação ID {licitacao_id}. Alterações não salvas para esta linha.")
+                                continue # Skip this row
                         
-                        # Remove fields that should not be updated directly or are display only
                         update_dict.pop("id", None) 
                         update_dict.pop("created_at", None)
                         update_dict.pop("updated_at", None)
                         
                         bidding_repo.update(licitacao_id, update_dict)
-                        st.success(f"Licitação ID {licitacao_id} atualizada com sucesso: {update_dict}")
-                    except ValueError as e: # Catch issues like invalid BiddingMode
-                        st.error(f"Erro ao atualizar Licitação ID {licitacao_id}: {e}")
+                        st.success(f"Licitação ID {licitacao_id} atualizada com sucesso.")
                     except Exception as e:
-                        st.error(f"Erro inesperado ao atualizar Licitação ID {licitacao_id}: {e}")
+                        st.error(f"Falha ao salvar Licitação ID {licitacao_id}: {e}")
             
             if changes_found:
                 st.rerun()
@@ -146,13 +163,22 @@ def show_management_tables_view(bidding_repo, item_repo, supplier_repo, quote_re
 
     with tab_items:
         st.subheader("Gerenciar Itens")
+        try:
+            all_biddings_items_tab = bidding_repo.get_all() # Use a different variable name to avoid scope collision if needed
+            all_items_from_repo = item_repo.get_all()
+        except Exception as e:
+            st.error(f"Erro ao carregar dados para a aba Itens: {e}")
+            return
 
-        all_biddings = bidding_repo.get_all()
-        if not all_biddings:
+        if not all_biddings_items_tab:
             st.info("Nenhuma licitação cadastrada para selecionar itens.")
-            return # Keep other tabs accessible
+            return
 
         bidding_options_map, bidding_option_ids = get_options_map(
+            data_list=all_biddings_items_tab, # Use the new variable
+            extra_cols=["city", "process_number", "mode_value"], 
+            default_message="Selecione uma Licitação para ver seus itens...",
+        )
             data_list=all_biddings,
             extra_cols=["city", "process_number", "mode_value"], # Use mode_value if Bidding model has it, else mode.value
             default_message="Selecione uma Licitação para ver seus itens...",
@@ -167,17 +193,16 @@ def show_management_tables_view(bidding_repo, item_repo, supplier_repo, quote_re
 
         if selected_bidding_id_for_items is None:
             st.info("Por favor, selecione uma licitação.")
-            return # Keep other tabs accessible
+            return
 
-        all_items_from_repo = item_repo.get_all()
+        # all_items_from_repo already fetched
         items_for_selected_bidding = [
             item for item in all_items_from_repo if item.bidding_id == selected_bidding_id_for_items
         ]
 
         if not items_for_selected_bidding:
             st.info("Nenhum item cadastrado para esta licitação.")
-            # Potentially allow creating a new item for this bidding here in the future
-            return # Keep other tabs accessible
+            return
 
         df_items = pd.DataFrame([item.model_dump() for item in items_for_selected_bidding])
         # Ensure date columns are datetime
@@ -193,14 +218,21 @@ def show_management_tables_view(bidding_repo, item_repo, supplier_repo, quote_re
         df_display_items = df_items[cols_to_display_items].copy()
 
         search_term_items = st.text_input("Buscar Itens (por nome, descrição, código):", key="search_itens_tab")
-        filtered_df_items = df_display_items
+        
+        unfiltered_df_items = df_display_items # Keep ref before filtering
+        
         if search_term_items:
             search_term_lower_items = search_term_items.lower()
-            filtered_df_items = df_display_items[
-                df_display_items["name"].astype(str).str.lower().str.contains(search_term_lower_items) |
-                df_display_items["description"].astype(str).str.lower().str.contains(search_term_lower_items) |
-                df_display_items["code"].astype(str).str.lower().str.contains(search_term_lower_items)
+            filtered_df_items = unfiltered_df_items[ # filter from unfiltered
+                unfiltered_df_items["name"].astype(str).str.lower().str.contains(search_term_lower_items) |
+                unfiltered_df_items["description"].astype(str).str.lower().str.contains(search_term_lower_items) |
+                unfiltered_df_items["code"].astype(str).str.lower().str.contains(search_term_lower_items)
             ]
+        else:
+            filtered_df_items = unfiltered_df_items
+
+        if filtered_df_items.empty and not unfiltered_df_items.empty and search_term_items:
+            st.info("Nenhum resultado encontrado para sua busca em Itens.")
         
         column_config_items = {
             "id": st.column_config.NumberColumn("ID", disabled=True),
@@ -258,15 +290,20 @@ def show_management_tables_view(bidding_repo, item_repo, supplier_repo, quote_re
                         item_update_dict.pop("created_at", None)
                         item_update_dict.pop("updated_at", None)
 
-                        # Type conversion for quantity if necessary (data_editor might return it as float/string)
                         if 'quantity' in item_update_dict:
-                            item_update_dict['quantity'] = float(item_update_dict['quantity'])
-
-
+                            try:
+                                item_update_dict['quantity'] = float(item_update_dict['quantity'])
+                                if item_update_dict['quantity'] <= 0: # Assuming quantity must be positive
+                                     st.error(f"Quantidade deve ser positiva para o Item ID {item_id}.")
+                                     continue
+                            except ValueError:
+                                st.error(f"Valor inválido para Quantidade ('{item_update_dict['quantity']}') no Item ID {item_id}.")
+                                continue
+                        
                         item_repo.update(item_id, item_update_dict)
-                        st.success(f"Item ID {item_id} atualizado com sucesso: {item_update_dict}")
+                        st.success(f"Item ID {item_id} atualizado com sucesso.")
                     except Exception as e:
-                        st.error(f"Erro ao atualizar Item ID {item_id}: {e}")
+                        st.error(f"Falha ao salvar Item ID {item_id}: {e}")
 
             if item_changes_found:
                 st.rerun()
@@ -275,11 +312,15 @@ def show_management_tables_view(bidding_repo, item_repo, supplier_repo, quote_re
 
     with tab_suppliers:
         st.subheader("Gerenciar Fornecedores")
-        suppliers_list = supplier_repo.get_all()
+        try:
+            suppliers_list = supplier_repo.get_all()
+        except Exception as e:
+            st.error(f"Erro ao carregar dados de Fornecedores: {e}")
+            return
 
         if not suppliers_list:
             st.info("Nenhum fornecedor cadastrado.")
-            return # Keep other tabs accessible
+            return
 
         df_suppliers = pd.DataFrame([s.model_dump() for s in suppliers_list])
         # Ensure date columns are datetime
@@ -295,17 +336,24 @@ def show_management_tables_view(bidding_repo, item_repo, supplier_repo, quote_re
         df_display_suppliers = df_suppliers[cols_to_display_suppliers].copy()
         
         search_term_suppliers = st.text_input("Buscar Fornecedores (por nome, website, email, etc.):", key="search_fornecedores_tab")
-        filtered_df_suppliers = df_display_suppliers
+        
+        unfiltered_df_suppliers = df_display_suppliers # Keep ref
+        
         if search_term_suppliers:
             search_term_lower_suppliers = search_term_suppliers.lower()
-            filtered_df_suppliers = df_display_suppliers[
-                df_display_suppliers["name"].astype(str).str.lower().str.contains(search_term_lower_suppliers) |
-                df_display_suppliers["website"].astype(str).str.lower().str.contains(search_term_lower_suppliers) |
-                df_display_suppliers["email"].astype(str).str.lower().str.contains(search_term_lower_suppliers) |
-                df_display_suppliers["phone"].astype(str).str.lower().str.contains(search_term_lower_suppliers) |
-                df_display_suppliers["desc"].astype(str).str.lower().str.contains(search_term_lower_suppliers)
+            filtered_df_suppliers = unfiltered_df_suppliers[ # filter from unfiltered
+                unfiltered_df_suppliers["name"].astype(str).str.lower().str.contains(search_term_lower_suppliers) |
+                unfiltered_df_suppliers["website"].astype(str).str.lower().str.contains(search_term_lower_suppliers) |
+                unfiltered_df_suppliers["email"].astype(str).str.lower().str.contains(search_term_lower_suppliers) |
+                unfiltered_df_suppliers["phone"].astype(str).str.lower().str.contains(search_term_lower_suppliers) |
+                unfiltered_df_suppliers["desc"].astype(str).str.lower().str.contains(search_term_lower_suppliers)
             ]
-        
+        else:
+            filtered_df_suppliers = unfiltered_df_suppliers
+            
+        if filtered_df_suppliers.empty and not unfiltered_df_suppliers.empty and search_term_suppliers:
+            st.info("Nenhum resultado encontrado para sua busca em Fornecedores.")
+
         column_config_suppliers = {
             "id": st.column_config.NumberColumn("ID", disabled=True),
             "name": st.column_config.TextColumn("Nome", required=True),
@@ -359,11 +407,10 @@ def show_management_tables_view(bidding_repo, item_repo, supplier_repo, quote_re
                         supplier_update_dict.pop("created_at", None)
                         supplier_update_dict.pop("updated_at", None)
                         
-                        # The key 'desc' from DataFrame matches model attribute 'desc'
                         supplier_repo.update(supplier_id, supplier_update_dict)
-                        st.success(f"Fornecedor ID {supplier_id} atualizado com sucesso: {supplier_update_dict}")
+                        st.success(f"Fornecedor ID {supplier_id} atualizado com sucesso.")
                     except Exception as e:
-                        st.error(f"Erro ao atualizar Fornecedor ID {supplier_id}: {e}")
+                        st.error(f"Falha ao salvar Fornecedor ID {supplier_id}: {e}")
             
             if supplier_changes_found:
                 st.rerun()
@@ -372,13 +419,17 @@ def show_management_tables_view(bidding_repo, item_repo, supplier_repo, quote_re
 
     with tab_quotes:
         st.subheader("Gerenciar Orçamentos")
-        quotes_list = quote_repo.get_all()
-        items_list = item_repo.get_all()
-        suppliers_list = supplier_repo.get_all()
+        try:
+            quotes_list = quote_repo.get_all()
+            items_list_quotes_tab = item_repo.get_all() # Avoid collision
+            suppliers_list_quotes_tab = supplier_repo.get_all() # Avoid collision
+        except Exception as e:
+            st.error(f"Erro ao carregar dados para a aba Orçamentos: {e}")
+            return
 
         if not quotes_list:
             st.info("Nenhum orçamento cadastrado.")
-            return # Keep other tabs accessible
+            return
 
         # Use get_quotes_dataframe for initial comprehensive data including calculated_price
         # This function expects lists of model instances.
@@ -396,10 +447,10 @@ def show_management_tables_view(bidding_repo, item_repo, supplier_repo, quote_re
         # Rebuilding a dataframe more explicitly for clarity and control over columns for data_editor
         quotes_data_for_editor = []
         for quote in quotes_list:
-            supplier_name = next((s.name for s in suppliers_list if s.id == quote.supplier_id), "N/A")
-            item_name = next((i.name for i in items_list if i.id == quote.item_id), "N/A")
+            supplier_name = next((s.name for s in suppliers_list_quotes_tab if s.id == quote.supplier_id), "N/A")
+            item_name = next((i.name for i in items_list_quotes_tab if i.id == quote.item_id), "N/A")
             
-            # Calculate price for display (consistent with get_quotes_dataframe)
+            # Calculate price for display
             base_price = quote.price if quote.price else Decimal(0)
             freight = quote.freight if quote.freight else Decimal(0)
             additional_costs = quote.additional_costs if quote.additional_costs else Decimal(0)
@@ -434,15 +485,22 @@ def show_management_tables_view(bidding_repo, item_repo, supplier_repo, quote_re
         df_quotes["updated_at"] = pd.to_datetime(df_quotes["updated_at"])
 
         search_term_quotes = st.text_input("Buscar Orçamentos (por item, fornecedor, notas):", key="search_orcamentos_tab")
-        filtered_df_quotes = df_quotes
+        
+        unfiltered_df_quotes = df_quotes # Keep ref
+        
         if search_term_quotes:
             search_term_lower_quotes = search_term_quotes.lower()
-            filtered_df_quotes = df_quotes[
-                df_quotes["item_name"].astype(str).str.lower().str.contains(search_term_lower_quotes) |
-                df_quotes["supplier_name"].astype(str).str.lower().str.contains(search_term_lower_quotes) |
-                df_quotes["notes"].astype(str).str.lower().str.contains(search_term_lower_quotes)
+            filtered_df_quotes = unfiltered_df_quotes[ # filter from unfiltered
+                unfiltered_df_quotes["item_name"].astype(str).str.lower().str.contains(search_term_lower_quotes) |
+                unfiltered_df_quotes["supplier_name"].astype(str).str.lower().str.contains(search_term_lower_quotes) |
+                unfiltered_df_quotes["notes"].astype(str).str.lower().str.contains(search_term_lower_quotes)
             ]
-        
+        else:
+            filtered_df_quotes = unfiltered_df_quotes
+
+        if filtered_df_quotes.empty and not unfiltered_df_quotes.empty and search_term_quotes:
+            st.info("Nenhum resultado encontrado para sua busca em Orçamentos.")
+
         column_config_quotes = {
             "id": st.column_config.NumberColumn("ID Orçamento", disabled=True), # Changed label
             "item_name": st.column_config.TextColumn("Nome do Item", disabled=True), # Changed label
@@ -510,22 +568,37 @@ def show_management_tables_view(bidding_repo, item_repo, supplier_repo, quote_re
                 if quote_update_dict:
                     quote_changes_found = True
                     try:
-                        # Convert to Decimal before sending to repo
-                        for key in ['price', 'freight', 'additional_costs', 'taxes', 'margin']:
-                            if key in quote_update_dict and quote_update_dict[key] is not None:
-                                quote_update_dict[key] = Decimal(str(quote_update_dict[key]))
-                            elif key in quote_update_dict and quote_update_dict[key] is None and key not in ["notes"]: # notes can be None
-                                # For numeric fields, if they are optional and None, ensure Decimal(0) or handle as per model
-                                if key in ["freight", "additional_costs", "taxes"]: # Optional fields
-                                     quote_update_dict[key] = Decimal("0.00") 
-                                else: # Required fields like price, margin should not be None if they reach here
-                                     pass
+                        for key_decimal in ['price', 'freight', 'additional_costs', 'taxes', 'margin']:
+                            if key_decimal in quote_update_dict and quote_update_dict[key_decimal] is not None:
+                                try:
+                                    quote_update_dict[key_decimal] = Decimal(str(quote_update_dict[key_decimal]))
+                                except ValueError:
+                                    st.error(f"Valor inválido para '{key_decimal}' ('{quote_update_dict[key_decimal]}') no Orçamento ID {quote_id}.")
+                                    # Remove problematic key or skip update for this row
+                                    quote_update_dict.pop(key_decimal) 
+                                    # Potentially skip this entire row's update if a required decimal field is invalid
+                                    if key_decimal in ["price", "margin"]: 
+                                        st.warning(f"Orçamento ID {quote_id} não atualizado devido a valor inválido em campo obrigatório.")
+                                        # To skip, we need a flag or to put the repo.update in an else block
+                                        # For now, let's assume it might proceed with partial data if not required, or fail at repo
+                                        continue # Or set a flag to skip repo.update for this row
+                            elif key_decimal in quote_update_dict and quote_update_dict[key_decimal] is None and key_decimal not in ["notes", "freight", "additional_costs", "taxes"]:
+                                # If a required field (price, margin) becomes None after edit (e.g. editor bug or cleared non-string), error
+                                st.error(f"Campo '{key_decimal}' é obrigatório e não pode ser vazio no Orçamento ID {quote_id}.")
+                                # This state should ideally be prevented by required=True in data_editor,
+                                # but as a safeguard.
+                                continue # Skip update for this row
+                            elif key_decimal in ["freight", "additional_costs", "taxes"] and quote_update_dict.get(key_decimal) is None:
+                                quote_update_dict[key_decimal] = Decimal("0.00") # Default optional Decimals to 0.00 if None
 
+                        if not quote_update_dict: # If all changes were problematic or no actual changes
+                            st.info(f"Nenhuma alteração válida para salvar para o Orçamento ID {quote_id}.")
+                            continue
 
                         quote_repo.update(quote_id, quote_update_dict)
                         st.success(f"Orçamento ID {quote_id} atualizado com sucesso.")
                     except Exception as e:
-                        st.error(f"Erro ao atualizar Orçamento ID {quote_id}: {e}")
+                        st.error(f"Falha ao salvar Orçamento ID {quote_id}: {e}")
             
             if quote_changes_found:
                 st.rerun()
@@ -533,12 +606,16 @@ def show_management_tables_view(bidding_repo, item_repo, supplier_repo, quote_re
                 st.info("Nenhuma alteração detectada para salvar em Orçamentos.")
 
     with tab_bidders:
-        st.subheader("Gerenciar Licitantes") # Formerly Competitors
-        bidders_list = bidder_repo.get_all()
+        st.subheader("Gerenciar Licitantes") 
+        try:
+            bidders_list = bidder_repo.get_all()
+        except Exception as e:
+            st.error(f"Erro ao carregar dados de Licitantes: {e}")
+            return
 
         if not bidders_list:
             st.info("Nenhum licitante cadastrado.")
-            return # Keep other tabs accessible
+            return
 
         df_bidders = pd.DataFrame([b.model_dump() for b in bidders_list])
         # Ensure date columns are datetime
@@ -554,17 +631,24 @@ def show_management_tables_view(bidding_repo, item_repo, supplier_repo, quote_re
         df_display_bidders = df_bidders[cols_to_display_bidders].copy()
         
         search_term_bidders = st.text_input("Buscar Licitantes (por nome, website, email, etc.):", key="search_licitantes_tab")
-        filtered_df_bidders = df_display_bidders
+        
+        unfiltered_df_bidders = df_display_bidders # Keep ref
+        
         if search_term_bidders:
             search_term_lower_bidders = search_term_bidders.lower()
-            filtered_df_bidders = df_display_bidders[
-                df_display_bidders["name"].astype(str).str.lower().str.contains(search_term_lower_bidders) |
-                df_display_bidders["website"].astype(str).str.lower().str.contains(search_term_lower_bidders) |
-                df_display_bidders["email"].astype(str).str.lower().str.contains(search_term_lower_bidders) |
-                df_display_bidders["phone"].astype(str).str.lower().str.contains(search_term_lower_bidders) |
-                df_display_bidders["desc"].astype(str).str.lower().str.contains(search_term_lower_bidders)
+            filtered_df_bidders = unfiltered_df_bidders[ # filter from unfiltered
+                unfiltered_df_bidders["name"].astype(str).str.lower().str.contains(search_term_lower_bidders) |
+                unfiltered_df_bidders["website"].astype(str).str.lower().str.contains(search_term_lower_bidders) |
+                unfiltered_df_bidders["email"].astype(str).str.lower().str.contains(search_term_lower_bidders) |
+                unfiltered_df_bidders["phone"].astype(str).str.lower().str.contains(search_term_lower_bidders) |
+                unfiltered_df_bidders["desc"].astype(str).str.lower().str.contains(search_term_lower_bidders)
             ]
-        
+        else:
+            filtered_df_bidders = unfiltered_df_bidders
+            
+        if filtered_df_bidders.empty and not unfiltered_df_bidders.empty and search_term_bidders:
+            st.info("Nenhum resultado encontrado para sua busca em Licitantes.")
+
         column_config_bidders = {
             "id": st.column_config.NumberColumn("ID", disabled=True),
             "name": st.column_config.TextColumn("Nome", required=True),
@@ -619,9 +703,9 @@ def show_management_tables_view(bidding_repo, item_repo, supplier_repo, quote_re
                         bidder_update_dict.pop("updated_at", None)
                         
                         bidder_repo.update(bidder_id, bidder_update_dict)
-                        st.success(f"Licitante ID {bidder_id} atualizado com sucesso: {bidder_update_dict}")
+                        st.success(f"Licitante ID {bidder_id} atualizado com sucesso.")
                     except Exception as e:
-                        st.error(f"Erro ao atualizar Licitante ID {bidder_id}: {e}")
+                        st.error(f"Falha ao salvar Licitante ID {bidder_id}: {e}")
             
             if bidder_changes_found:
                 st.rerun()
@@ -630,17 +714,21 @@ def show_management_tables_view(bidding_repo, item_repo, supplier_repo, quote_re
 
     with tab_bids:
         st.subheader("Gerenciar Lances")
-        bids_list = bid_repo.get_all()
-        items_list = item_repo.get_all() # For item name mapping
-        bidders_list = bidder_repo.get_all() # For bidder name mapping
+        try:
+            bids_list = bid_repo.get_all()
+            items_list_bids_tab = item_repo.get_all() 
+            bidders_list_bids_tab = bidder_repo.get_all()
+        except Exception as e:
+            st.error(f"Erro ao carregar dados para a aba Lances: {e}")
+            return
 
         if not bids_list:
             st.info("Nenhum lance cadastrado.")
-            return # Keep other tabs accessible
+            return
 
         # Create mappings for item and bidder names
-        item_names_map = {item.id: item.name for item in items_list}
-        bidder_names_map = {bidder.id: bidder.name for bidder in bidders_list}
+        item_names_map = {item.id: item.name for item in items_list_bids_tab}
+        bidder_names_map = {bidder.id: bidder.name for bidder in bidders_list_bids_tab}
         NO_BIDDER_DISPLAY_NAME = "Nenhum Licitante" # Consistent with main page logic
 
         bids_data_for_editor = []
@@ -663,15 +751,22 @@ def show_management_tables_view(bidding_repo, item_repo, supplier_repo, quote_re
         df_bids["updated_at"] = pd.to_datetime(df_bids["updated_at"])
 
         search_term_bids = st.text_input("Buscar Lances (por item, licitante, notas):", key="search_lances_tab")
-        filtered_df_bids = df_bids
+        
+        unfiltered_df_bids = df_bids # Keep ref
+        
         if search_term_bids:
             search_term_lower_bids = search_term_bids.lower()
-            filtered_df_bids = df_bids[
-                df_bids["item_name"].astype(str).str.lower().str.contains(search_term_lower_bids) |
-                df_bids["bidder_name"].astype(str).str.lower().str.contains(search_term_lower_bids) |
-                df_bids["notes"].astype(str).str.lower().str.contains(search_term_lower_bids)
+            filtered_df_bids = unfiltered_df_bids[ # filter from unfiltered
+                unfiltered_df_bids["item_name"].astype(str).str.lower().str.contains(search_term_lower_bids) |
+                unfiltered_df_bids["bidder_name"].astype(str).str.lower().str.contains(search_term_lower_bids) |
+                unfiltered_df_bids["notes"].astype(str).str.lower().str.contains(search_term_lower_bids)
             ]
-        
+        else:
+            filtered_df_bids = unfiltered_df_bids
+
+        if filtered_df_bids.empty and not unfiltered_df_bids.empty and search_term_bids:
+            st.info("Nenhum resultado encontrado para sua busca em Lances.")
+            
         column_config_bids = {
             "id": st.column_config.NumberColumn("ID Lance", disabled=True), # Changed label
             "item_name": st.column_config.TextColumn("Nome do Item", disabled=True), # Changed label
@@ -729,16 +824,23 @@ def show_management_tables_view(bidding_repo, item_repo, supplier_repo, quote_re
                     bid_changes_found = True
                     try:
                         if 'price' in bid_update_dict:
-                            bid_update_dict['price'] = Decimal(str(bid_update_dict['price']))
+                            try:
+                                price_val = bid_update_dict['price']
+                                bid_update_dict['price'] = Decimal(str(price_val))
+                                if bid_update_dict['price'] <= Decimal(0):
+                                    st.error(f"Preço deve ser positivo para o Lance ID {bid_id}.")
+                                    continue
+                            except ValueError:
+                                st.error(f"Valor inválido para Preço ('{price_val}') no Lance ID {bid_id}.")
+                                continue
                         
-                        # Ensure notes can be None if cleared
                         if 'notes' in bid_update_dict and (bid_update_dict['notes'] is None or str(bid_update_dict['notes']).strip() == ""):
                             bid_update_dict['notes'] = None
                             
                         bid_repo.update(bid_id, bid_update_dict)
                         st.success(f"Lance ID {bid_id} atualizado com sucesso.")
                     except Exception as e:
-                        st.error(f"Erro ao atualizar Lance ID {bid_id}: {e}")
+                        st.error(f"Falha ao salvar Lance ID {bid_id}: {e}")
             
             if bid_changes_found:
                 st.rerun()
