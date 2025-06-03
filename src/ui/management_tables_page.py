@@ -615,7 +615,7 @@ def show_management_tables_view(bidding_repo, item_repo, supplier_repo, quote_re
         else:
             bidding_options_map_quotes, bidding_option_ids_quotes = get_options_map(
                 data_list=all_biddings_for_quotes_tab,
-                extra_cols=["city", "process_number", "mode_value"],
+                extra_cols=["city", "process_number", "mode"],
                 default_message="Selecione uma Licitação para ver os orçamentos...",
             )
             selected_bidding_id_for_quotes = st.selectbox(
