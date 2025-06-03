@@ -24,7 +24,11 @@ from ui.dialogs import (
     manage_bidder_dialog_wrapper, # Renamed import
     set_dialog_repositories,  # To pass repo instances
 )
-from src.ui.management_tables_page import show_management_tables_view # New import
+from ui.management_tables_page import show_management_tables_view # New import
+
+# --- Application Setup (must be first Streamlit command) ---
+APP_TITLE = "📊 Sistema Integrado de Licitações" # Define APP_TITLE before using it
+st.set_page_config(layout="wide", page_title=APP_TITLE)
 
 # --- Session State Initialization Function (moved from state.py) ---
 def initialize_session_state():
@@ -558,12 +562,11 @@ set_dialog_repositories(
     bi_repo=bid_repo,
 )
 
-# --- Application Setup ---
-st.set_page_config(layout="wide", page_title=APP_TITLE)
-st.title(APP_TITLE) # This title will be generic for the whole app
+# --- Application Title (can be set after page config) ---
+st.title(APP_TITLE)
 
 # --- Conditional View Rendering ---
 if st.session_state.current_view == "Main View":
     show_main_view()
 elif st.session_state.current_view == "Management Tables":
-    show_management_tables_view()
+    show_management_tables_view(bidding_repo, item_repo, supplier_repo, quote_repo, bidder_repo, bid_repo)
