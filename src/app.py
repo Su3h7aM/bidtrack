@@ -135,28 +135,12 @@ def show_main_view():
             if not edited_quotes_data: # Empty dict
                 edited_quotes_df = pd.DataFrame()
             else:
-                # Assuming if it's a dict, it might be {index: {col: value}}
-                # or st.data_editor might pass a single row as {col:value}.
-                # If it's a single row like {col: value}, pd.DataFrame([edited_quotes_data]) is better.
-                # The prompt specifies orient='index'. This implies a structure like {row_idx: {col: value, ...}}.
-                # This structure is less common for st.data_editor's direct output for multiple rows.
-                # For safety, if from_dict with orient='index' fails or gives weird structure for simple {col:val} dicts,
-                # one might reconsider. But following prompt:
-                try:
-                    edited_quotes_df = pd.DataFrame.from_dict(edited_quotes_data, orient='index')
-                    # A common issue: if edited_quotes_data = {'col1': 'val1', 'col2': 'val2'},
-                    # from_dict(orient='index') creates a DataFrame where 'col1', 'col2' are rows.
-                    # This is usually not what's intended for table data.
-                    # If data_editor provides a single edited row as a flat dict, then pd.DataFrame([edited_quotes_data]) is preferred.
-                    # Given the ambiguity and typical data_editor output (list of dicts),
-                    # this path (isinstance dict) is less common.
-                    # If it's a single row dict from data_editor e.g. {0: {'col': val}}, then orient='index' is fine.
-                    # If it's {'col':val} for one row, then `pd.DataFrame([edited_quotes_data])` is better.
-                    # Sticking to prompt's orient='index' for dict.
-                    # If this leads to an empty df with wrong columns for a single row, it might need a pd.DataFrame([data]) fallback.
-                    # However, the most common case is list of dicts, handled above.
-                except ValueError: # e.g. if dict is not suitable for from_dict orient='index'
-                    edited_quotes_df = pd.DataFrame([edited_quotes_data]) # Fallback for simple {col:val} dict
+                # If it's a dict, attempt to convert using from_dict with orient='index'.
+                # This implies a structure like {row_index: {col_name: value, ...}}
+                # If st.data_editor provides a flat dict for a single row like {col_name: value, ...},
+                # pd.DataFrame.from_dict with orient='index' would not produce the desired DataFrame structure.
+                # However, the prompt specifically asks for this behavior without the try-except fallback.
+                edited_quotes_df = pd.DataFrame.from_dict(edited_quotes_data, orient='index')
 
         else: # None or other unsupported types
             edited_quotes_df = pd.DataFrame()
@@ -284,11 +268,8 @@ def show_main_view():
             if not edited_bids_data: # Empty dict
                 edited_bids_df = pd.DataFrame()
             else:
-                try:
-                    # Same considerations as in handle_quote_change for dict data.
-                    edited_bids_df = pd.DataFrame.from_dict(edited_bids_data, orient='index')
-                except ValueError:
-                    edited_bids_df = pd.DataFrame([edited_bids_data]) # Fallback
+                # Applying same logic as for quotes, as per prompt.
+                edited_bids_df = pd.DataFrame.from_dict(edited_bids_data, orient='index')
         else: # None or other unsupported types
             edited_bids_df = pd.DataFrame()
 
@@ -814,6 +795,8 @@ def show_main_view():
                     graph_cols_display = st.columns(2)
                     with graph_cols_display[0]:
                         edited_quotes_data_for_plot = st.session_state.get('quotes_editor_main_view', []) # Default to list
+                        # Initialize edited_quotes_df_for_plot (optional if all paths assign, but good for clarity)
+                        # edited_quotes_df_for_plot = None
                         if isinstance(edited_quotes_data_for_plot, pd.DataFrame):
                             edited_quotes_df_for_plot = edited_quotes_data_for_plot
                         elif isinstance(edited_quotes_data_for_plot, list):
@@ -822,10 +805,7 @@ def show_main_view():
                             if not edited_quotes_data_for_plot: # Empty dict
                                 edited_quotes_df_for_plot = pd.DataFrame()
                             else:
-                                try:
-                                    edited_quotes_df_for_plot = pd.DataFrame.from_dict(edited_quotes_data_for_plot, orient='index')
-                                except ValueError:
-                                    edited_quotes_df_for_plot = pd.DataFrame([edited_quotes_data_for_plot]) # Fallback
+                                edited_quotes_df_for_plot = pd.DataFrame.from_dict(edited_quotes_data_for_plot, orient='index')
                         else: # None or other unsupported types
                             edited_quotes_df_for_plot = pd.DataFrame()
 
@@ -844,18 +824,8 @@ def show_main_view():
                         original_bids_data_for_plot = st.session_state.get('original_bids_df', []) # Default to list
                         if isinstance(original_bids_data_for_plot, pd.DataFrame):
                             original_bids_df_for_plot = original_bids_data_for_plot
-                        elif isinstance(original_bids_data_for_plot, list):
+                        else: # Assuming it's a list of dicts if not already a DataFrame, or other pd.DataFrame compatible type
                             original_bids_df_for_plot = pd.DataFrame(original_bids_data_for_plot)
-                        elif isinstance(original_bids_data_for_plot, dict):
-                            if not original_bids_data_for_plot: # Empty dict
-                                original_bids_df_for_plot = pd.DataFrame()
-                            else:
-                                try:
-                                    original_bids_df_for_plot = pd.DataFrame.from_dict(original_bids_data_for_plot, orient='index')
-                                except ValueError:
-                                    original_bids_df_for_plot = pd.DataFrame([original_bids_data_for_plot]) # Fallback
-                        else: # None or other unsupported types
-                            original_bids_df_for_plot = pd.DataFrame()
 
                         # For min_quote_price_val, use the already processed edited_quotes_df_for_plot from above
                         if (
