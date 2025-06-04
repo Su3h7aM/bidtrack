@@ -528,7 +528,7 @@ def show_main_view():
                                 except ValueError:
                                     st.error(f"ID inválido para remoção: {quote_id_str}.")
                                 except Exception as e:
-                                st.error(f"Erro ao remover orçamento ID {quote_id_str}: {e}")
+                                    st.error(f"Erro ao remover orçamento ID {quote_id_str}: {e}")
 
                         # ADDITIONS and UPDATES
                         for index, edited_row in current_editor_df.iterrows():
