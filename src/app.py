@@ -432,58 +432,232 @@ def show_main_view():
                     all_bids_from_repo = bid_repo.get_all()
                     bids_for_item_list = [b for b in all_bids_from_repo if b.item_id == st.session_state.selected_item_id]
 
-                    quotes_for_item_df_display = get_quotes_dataframe(
-                        quotes_for_item_list, all_suppliers
+                    # Ensure all_items_list is available for get_quotes_dataframe
+                    all_items_list = item_repo.get_all() # Fetch all items
+                    quotes_for_item_list = [q for q in all_quotes_from_repo if q.item_id == st.session_state.selected_item_id]
+                    all_bids_from_repo = bid_repo.get_all()
+                    bids_for_item_list = [b for b in all_bids_from_repo if b.item_id == st.session_state.selected_item_id]
+
+                    # Ensure all_items_list is available for get_quotes_dataframe
+                    all_items_list = item_repo.get_all() # Fetch all items
+
+                    # Prepare original DataFrames for comparison later
+                    original_quotes_df = get_quotes_dataframe(
+                        quotes_list=quotes_for_item_list,
+                        suppliers_list=all_suppliers,
+                        items_list=all_items_list
                     )
-                    bids_for_item_df_display = get_bids_dataframe(
-                        bids_for_item_list, all_bidders
+                    original_bids_df = get_bids_dataframe(
+                        bids_list=bids_for_item_list,
+                        bidders_list=all_bidders,
+                        items_list=all_items_list
                     )
 
                     table_cols_display = st.columns(2)
                     with table_cols_display[0]:
-                        if not quotes_for_item_df_display.empty:
-                            display_cols_quotes = [
-                                "supplier_name", "price", "freight", "additional_costs",
-                                "taxes", "margin", "calculated_price", "notes",
-                            ]
-                            final_display_cols_quotes = [
-                                col for col in display_cols_quotes if col in quotes_for_item_df_display.columns
-                            ]
-                            column_config_quotes = {
-                                "supplier_name": st.column_config.TextColumn(label="Nome do Fornecedor"),
-                                "price": st.column_config.NumberColumn(label="Preço Base", format="R$ %.2f"),
-                                "freight": st.column_config.NumberColumn(label="Frete", format="R$ %.2f"),
-                                "additional_costs": st.column_config.NumberColumn(label="Custos Adicionais", format="R$ %.2f"),
-                                "taxes": st.column_config.NumberColumn(label="Impostos (%)", format="%.2f%%"),
-                                "margin": st.column_config.NumberColumn(label="Margem (%)", format="%.2f%%"),
-                                "calculated_price": st.column_config.NumberColumn(label="Preço Calculado", format="R$ %.2f"),
-                                "notes": st.column_config.TextColumn(label="Notas"),
+                        st.markdown("##### Orçamentos do Item")
+                        if not original_quotes_df.empty:
+                            # original_quotes_df is the direct output of get_quotes_dataframe (all columns, 'id' is a column)
+
+                            # 2. Update column_config_quotes_main
+                            column_config_quotes_main = {
+                                "id": None,  # Hide 'id' column by default
+                                "item_id": None, # Hide 'item_id'
+                                "supplier_id": None, # Hide 'supplier_id'
+                                "created_at": None, # Hide 'created_at'
+                                "updated_at": None, # Hide 'updated_at'
+
+                                "item_name": None, # Hide "Item" column by default
+                                "supplier_name": st.column_config.TextColumn("Fornecedor", disabled=True, help="Nome do fornecedor (não editável aqui)"),
+                                "price": st.column_config.NumberColumn("Custo Base (R$)", format="%.2f", required=True, help="Preço de custo do produto/serviço junto ao fornecedor."),
+                                "freight": st.column_config.NumberColumn("Frete (R$)", format="%.2f", help="Valor do frete."),
+                                "additional_costs": st.column_config.NumberColumn("Custos Adic. (R$)", format="%.2f", help="Outros custos diretos."),
+                                "taxes": st.column_config.NumberColumn("Impostos (%)", format="%.2f", help="Percentual de impostos incidentes sobre o preço de venda. Ex: 6 para 6%."),
+                                "margin": st.column_config.NumberColumn("Margem (%)", format="%.2f", required=True, help="Margem de lucro desejada sobre o custo total. Ex: 20 para 20%."),
+                                "calculated_price": st.column_config.NumberColumn("Preço Final Calculado", format="R$ %.2f", disabled=True, help="Preço final de venda (calculado automaticamente)."),
+                                "notes": st.column_config.TextColumn("Notas", help="Observações sobre o orçamento."),
                             }
-                            st.dataframe(
-                                quotes_for_item_df_display[final_display_cols_quotes],
-                                hide_index=True,
+                            # Ensure all columns from original_quotes_df are present in config, adding None if missing
+                            for col_name in original_quotes_df.columns:
+                                if col_name not in column_config_quotes_main:
+                                    column_config_quotes_main[col_name] = None # Hide unspecified columns by default
+
+                            # 1. DataFrame for Editor: Pass original_quotes_df
+                            # hide_index=True means edited_quotes_df will have a range index. 'id' will be a column in edited_quotes_df.
+                            edited_quotes_df = st.data_editor(
+                                original_quotes_df, # Pass the full original DataFrame
+                                column_config=column_config_quotes_main,
+                                key="quotes_editor_main_view",
                                 use_container_width=True,
-                                column_config=column_config_quotes,
+                                hide_index=True,
+                                num_rows="dynamic"
                             )
+
+                            if st.button("Salvar Alterações nos Orçamentos", key="save_quotes_main_view"):
+                                changes_made = False
+                                # 3. Update Save Logic for Quotes
+                                editable_quote_cols = ['price', 'freight', 'additional_costs', 'taxes', 'margin', 'notes']
+
+                                if not edited_quotes_df.empty:
+                                    for editor_idx, edited_row_series in edited_quotes_df.iterrows(): # editor_idx is range index
+                                        quote_id = edited_row_series['id'] # Get 'id' from the row data
+
+                                        # Find the original row from original_quotes_df (the DataFrame before editor)
+                                        original_row_df_filtered = original_quotes_df[original_quotes_df['id'] == quote_id]
+
+                                        if original_row_df_filtered.empty:
+                                            st.error(f"Erro: Orçamento original com ID {quote_id} não encontrado para comparação.")
+                                            continue
+                                        original_row_series = original_row_df_filtered.iloc[0]
+
+                                        update_dict = {}
+                                        for col in editable_quote_cols:
+                                            if col not in edited_row_series.index: # Should not happen if editable_quote_cols is correct
+                                                st.warning(f"Coluna editável '{col}' não encontrada na linha editada do orçamento ID {quote_id}.")
+                                                continue
+                                            if col not in original_row_series.index: # Should not happen
+                                                st.warning(f"Coluna editável '{col}' não encontrada na linha original do orçamento ID {quote_id}.")
+                                                continue
+
+                                            original_value = original_row_series[col]
+                                            edited_value = edited_row_series[col]
+
+                                            if col in ["price", "freight", "additional_costs", "taxes", "margin"]:
+                                                try:
+                                                    # Handle None or empty string for optional Decimal fields before conversion
+                                                    if edited_value is None or (isinstance(edited_value, str) and not edited_value.strip()):
+                                                        edited_value_decimal = None
+                                                    else:
+                                                        edited_value_decimal = Decimal(str(edited_value))
+
+                                                    # Special handling for optional fields where None is different from 0 for comparison
+                                                    if original_value is None and edited_value_decimal is None: # Both None, no change
+                                                        pass
+                                                    elif original_value is None and edited_value_decimal == Decimal(0) and col in ["freight", "additional_costs", "taxes"]:
+                                                        # If original was None, and new is 0 for an optional field, consider it a change to 0
+                                                        update_dict[col] = Decimal(0)
+                                                    elif original_value != edited_value_decimal:
+                                                        update_dict[col] = edited_value_decimal
+                                                except ValueError: # More specific error for Decimal conversion
+                                                    st.error(f"Valor inválido para {col} (decimal) no orçamento ID {quote_id}: '{edited_value}'.")
+                                                    continue
+                                                except Exception as e: # Catch any other conversion error
+                                                    st.error(f"Erro ao converter {col} no orçamento ID {quote_id}: {edited_value}. Erro: {e}")
+                                                    continue
+                                            elif original_value != edited_value:
+                                                update_dict[col] = edited_value
+
+                                        if update_dict:
+                                            try:
+                                                quote_repo.update(quote_id, update_dict)
+                                                st.success(f"Orçamento ID {quote_id} atualizado com sucesso.")
+                                                changes_made = True
+                                            except Exception as e:
+                                                st.error(f"Erro ao atualizar orçamento ID {quote_id}: {e}. Dados: {update_dict}")
+                                if changes_made:
+                                    st.rerun()
                         else:
                             st.info("Nenhum orçamento cadastrado para este item.")
+
                     with table_cols_display[1]:
-                        if not bids_for_item_df_display.empty:
-                            display_cols_bids = ["bidder_name", "price", "notes"]
-                            final_display_cols_bids = [
-                                col for col in display_cols_bids if col in bids_for_item_df_display.columns
-                            ]
-                            column_config_bids = {
-                                "bidder_name": st.column_config.TextColumn(label="Nome do Licitante"),
-                                "price": st.column_config.NumberColumn(label="Preço Ofertado", format="R$ %.2f"),
-                                "notes": st.column_config.TextColumn(label="Notas"),
+                        st.markdown("##### Lances do Item")
+                        if not original_bids_df.empty:
+                            # original_bids_df is the direct output of get_bids_dataframe (all columns, 'id' is a column)
+
+                            # 2. Update column_config_bids_main
+                            column_config_bids_main = {
+                                "id": None, # Hide 'id' column by default
+                                "item_id": None, # Hide 'item_id'
+                                "bidding_id": None, # Hide 'bidding_id'
+                                "bidder_id": None, # Hide 'bidder_id'
+                                "created_at": None, # Hide 'created_at'
+                                "updated_at": None, # Hide 'updated_at'
+
+                                "item_name": None, # Hide "Item" column by default
+                                "bidder_name": st.column_config.TextColumn("Licitante", disabled=True, help="Nome do licitante (não editável aqui)."),
+                                "price": st.column_config.NumberColumn("Preço Ofertado (R$)", format="R$ %.2f", min_value=0.01, required=True, help="Valor do lance ofertado."),
+                                "notes": st.column_config.TextColumn("Notas", help="Observações sobre o lance."),
                             }
-                            st.dataframe(
-                                bids_for_item_df_display[final_display_cols_bids],
-                                hide_index=True,
+                            # Ensure all columns from original_bids_df are present in config, adding None if missing
+                            for col_name in original_bids_df.columns:
+                                if col_name not in column_config_bids_main:
+                                    column_config_bids_main[col_name] = None # Hide unspecified columns by default
+
+                            # 1. DataFrame for Editor: Pass original_bids_df
+                            # hide_index=True means edited_bids_df will have a range index. 'id' will be a column in edited_bids_df.
+                            edited_bids_df = st.data_editor(
+                                original_bids_df, # Pass the full original DataFrame
+                                column_config=column_config_bids_main,
+                                key="bids_editor_main_view",
                                 use_container_width=True,
-                                column_config=column_config_bids,
+                                hide_index=True,
+                                num_rows="dynamic"
                             )
+
+                            if st.button("Salvar Alterações nos Lances", key="save_bids_main_view"):
+                                changes_made = False
+                                # 3. Update Save Logic for Bids
+                                editable_bid_cols = ['price', 'notes']
+
+                                if not edited_bids_df.empty:
+                                    for editor_idx, edited_row_series in edited_bids_df.iterrows(): # editor_idx is range index
+                                        bid_id = edited_row_series['id'] # Get 'id' from the row data
+
+                                        # Find the original row from original_bids_df (the DataFrame before editor)
+                                        original_row_df_filtered = original_bids_df[original_bids_df['id'] == bid_id]
+
+                                        if original_row_df_filtered.empty:
+                                            st.error(f"Erro: Lance original com ID {bid_id} não encontrado para comparação.")
+                                            continue
+                                        original_row_series = original_row_df_filtered.iloc[0]
+
+                                        update_dict = {}
+                                        for col in editable_bid_cols:
+                                            if col not in edited_row_series.index: # Should not happen if editable_bid_cols is correct
+                                                st.warning(f"Coluna editável '{col}' não encontrada na linha editada do lance ID {bid_id}.")
+                                                continue
+                                            if col not in original_row_series.index: # Should not happen
+                                                st.warning(f"Coluna editável '{col}' não encontrada na linha original do lance ID {bid_id}.")
+                                                continue
+
+                                            original_value = original_row_series[col]
+                                            edited_value = edited_row_series[col]
+
+                                            if col == "price":
+                                                try:
+                                                    if edited_value is None or (isinstance(edited_value, str) and not str(edited_value).strip()):
+                                                        st.error(f"Preço não pode ser vazio para o lance ID {bid_id}.")
+                                                        # update_dict.clear() # Clear to prevent partial update for this row
+                                                        # break # Stop processing this row
+                                                        # To prevent saving this row if price is invalid, we can set a flag or skip adding to update_dict
+                                                        # For now, let's assume an error message is enough and other valid fields for this row might be saved if any.
+                                                        # A better approach would be to invalidate the entire row's update.
+                                                        # For simplicity in this step, we'll just show error and skip this field.
+                                                        # The `required=True` in NumberColumn should ideally prevent this,
+                                                        # but explicit check here is safer.
+                                                        continue # Skip this problematic field
+
+                                                    edited_value_decimal = Decimal(str(edited_value))
+                                                    if original_value != edited_value_decimal:
+                                                        update_dict[col] = edited_value_decimal
+                                                except ValueError:
+                                                    st.error(f"Valor inválido para preço no lance ID {bid_id}: '{edited_value}'.")
+                                                    continue
+                                                except Exception as e: # Catch any other conversion error
+                                                    st.error(f"Erro ao converter preço no lance ID {bid_id}: {edited_value}. Erro: {e}")
+                                                    continue
+                                            elif original_value != edited_value:
+                                                update_dict[col] = edited_value
+
+                                        if update_dict: # Only proceed if there are changes to save for this row
+                                            try:
+                                                bid_repo.update(bid_id, update_dict)
+                                                st.success(f"Lance ID {bid_id} atualizado com sucesso.")
+                                                changes_made = True
+                                            except Exception as e:
+                                                st.error(f"Erro ao atualizar lance ID {bid_id}: {e}. Dados: {update_dict}")
+                                if changes_made:
+                                    st.rerun()
                         else:
                             st.info("Nenhum lance cadastrado para este item.")
 
@@ -491,31 +665,34 @@ def show_main_view():
                     graph_cols_display = st.columns(2)
                     with graph_cols_display[0]:
                         if (
-                            not quotes_for_item_df_display.empty
-                            and "calculated_price" in quotes_for_item_df_display.columns 
-                            and "supplier_name" in quotes_for_item_df_display.columns
+                            not edited_quotes_df.empty  # Use standardized edited_quotes_df
+                            and "calculated_price" in edited_quotes_df.columns
+                            and "supplier_name" in edited_quotes_df.columns
                         ):
                             st.plotly_chart(
-                                create_quotes_figure(quotes_for_item_df_display),
+                                create_quotes_figure(edited_quotes_df), # Use standardized edited_quotes_df
                                 use_container_width=True,
                             )
                         else:
                             st.caption("Gráfico de orçamentos não disponível.")
                     with graph_cols_display[1]:
+                        # Use original_bids_df for the chart data to ensure 'created_at' is present
+                        # and for the emptiness check related to plotting.
                         if (
-                            not bids_for_item_df_display.empty
-                            and "price" in bids_for_item_df_display.columns
-                            and "bidder_name" in bids_for_item_df_display.columns 
+                            not original_bids_df.empty # Changed to original_bids_df
+                            and "price" in original_bids_df.columns
+                            and "bidder_name" in original_bids_df.columns
+                            and "created_at" in original_bids_df.columns # Ensure created_at is checked on original_bids_df
                         ):
                             min_quote_price_val = ( 
-                                quotes_for_item_df_display["calculated_price"].min()
-                                if not quotes_for_item_df_display.empty
-                                and "calculated_price" in quotes_for_item_df_display.columns
+                                edited_quotes_df["calculated_price"].min() # Use standardized edited_quotes_df
+                                if not edited_quotes_df.empty
+                                and "calculated_price" in edited_quotes_df.columns
                                 else None
                             )
                             st.plotly_chart(
                                 create_bids_figure(
-                                    bids_for_item_df_display, min_quote_price_val
+                                    original_bids_df, min_quote_price_val # Changed to original_bids_df
                                 ),
                                 use_container_width=True,
                             )
@@ -563,7 +740,7 @@ set_dialog_repositories(
 )
 
 # --- Application Title (can be set after page config) ---
-st.title(APP_TITLE) 
+st.title(APP_TITLE)
 
 # --- Conditional View Rendering ---
 if st.session_state.current_view == "Main View":

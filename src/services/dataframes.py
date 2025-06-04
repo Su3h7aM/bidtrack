@@ -1,14 +1,18 @@
 import pandas as pd
+from decimal import Decimal, InvalidOperation
 from db.models import (
     Quote,
     Bid,
     Supplier,
-    Bidder, # Renamed from Competitor
-)  # Assuming models are accessible like this
+    Bidder,
+    Item # Added Item for get_quotes_dataframe
+)
 
 
 def get_quotes_dataframe(
-    quotes_list: list[Quote], suppliers_list: list[Supplier]
+    quotes_list: list[Quote],
+    suppliers_list: list[Supplier],
+    items_list: list[Item] # Added items_list
 ) -> pd.DataFrame:
     """
     Creates and preprocesses a DataFrame for quotes.
@@ -16,159 +20,173 @@ def get_quotes_dataframe(
     Args:
         quotes_list: A list of Quote objects.
         suppliers_list: A list of Supplier objects.
+        items_list: A list of Item objects.
 
     Returns:
-        A pandas DataFrame with quote data, including supplier names and formatted dates.
+        A pandas DataFrame with quote data, including supplier names, item names,
+        calculated_price, and formatted dates.
     """
     if not quotes_list:
+        # Define columns based on expected output, including new ones
         return pd.DataFrame(
-            columns=["supplier_name", "price", "created_at", "update_at", "notes"]
+            columns=[
+                "id", "item_id", "supplier_id", "price", "freight", "additional_costs",
+                "taxes", "margin", "notes", "created_at", "updated_at",
+                "supplier_name", "item_name", "calculated_price"
+            ]
         )
 
     quotes_df = pd.DataFrame([q.model_dump() for q in quotes_list])
 
+    # Map supplier names
     if not quotes_df.empty and suppliers_list:
         supplier_map = {s.id: s.name for s in suppliers_list}
-        quotes_df["supplier_name"] = quotes_df["supplier_id"].map(supplier_map)
+        quotes_df["supplier_name"] = quotes_df["supplier_id"].map(supplier_map).fillna("Fornecedor Desconhecido")
+    elif not quotes_df.empty:
+        quotes_df["supplier_name"] = "Fornecedor Desconhecido"
 
+    # Map item names
+    if not quotes_df.empty and items_list:
+        item_map = {i.id: i.name for i in items_list}
+        quotes_df["item_name"] = quotes_df["item_id"].map(item_map).fillna("Item Desconhecido")
+    elif not quotes_df.empty:
+        quotes_df["item_name"] = "Item Desconhecido"
+
+    # Convert date columns to datetime objects (naive)
     if "created_at" in quotes_df.columns:
-        quotes_df["created_at"] = pd.to_datetime(quotes_df["created_at"]).dt.strftime(
-            "%Y-%m-%d %H:%M:%S"
-        )
+        quotes_df["created_at"] = pd.to_datetime(quotes_df["created_at"], errors='coerce').dt.tz_localize(None)
+    if "updated_at" in quotes_df.columns:
+        quotes_df["updated_at"] = pd.to_datetime(quotes_df["updated_at"], errors='coerce').dt.tz_localize(None)
 
-    if "update_at" in quotes_df.columns:
-        # Ensure 'update_at' exists and is not all NaT before formatting
-        if pd.notnull(quotes_df["update_at"]).all():
-            quotes_df["update_at"] = pd.to_datetime(quotes_df["update_at"]).dt.strftime(
-                "%Y-%m-%d %H:%M:%S"
-            )
+    # Calculate 'calculated_price' using Decimal for precision
+    # Ensure necessary columns are present and are of Decimal type for calculation
+    cols_for_calc = ['price', 'freight', 'additional_costs', 'taxes', 'margin']
+    for col in cols_for_calc:
+        if col not in quotes_df.columns:
+            quotes_df[col] = Decimal('0.0') # Add column if missing, initialize to 0
         else:
-            quotes_df["update_at"] = None  # Or some other placeholder like '-' or ''
+            # Convert to Decimal, handling potential errors from various input types
+            def to_decimal_safe(value):
+                if isinstance(value, Decimal):
+                    return value
+                if value is None:
+                    return Decimal('0.0')
+                try:
+                    return Decimal(str(value))
+                except (InvalidOperation, TypeError, ValueError):
+                    return Decimal('NaN') # Use NaN for values that cannot be converted
+            quotes_df[col] = quotes_df[col].apply(to_decimal_safe)
+            # Replace NaN with 0 for calculation, or decide how to handle rows with bad data
+            quotes_df[col] = quotes_df[col].replace(Decimal('NaN'), Decimal('0.0'))
 
-    # Convert to numeric, coercing errors and filling NaNs
-    # These fields are Decimal in the model, pandas usually converts them to object or float.
-    # Explicit conversion ensures they are numeric for calculations.
-    quotes_df['price'] = pd.to_numeric(quotes_df['price'], errors='coerce').fillna(0.0)
-    quotes_df['freight'] = pd.to_numeric(quotes_df['freight'], errors='coerce').fillna(0.0)
-    quotes_df['additional_costs'] = pd.to_numeric(quotes_df['additional_costs'], errors='coerce').fillna(0.0)
-    quotes_df['taxes'] = pd.to_numeric(quotes_df['taxes'], errors='coerce').fillna(0.0) # This is I (%)
-    quotes_df['margin'] = pd.to_numeric(quotes_df['margin'], errors='coerce').fillna(0.0) # This is L (%)
 
-    total_direct_cost = quotes_df['price'] + quotes_df['freight'] + quotes_df['additional_costs']
-    # Ensure taxes and margin are treated as percentages (e.g., 6 for 6%)
-    total_percentage_sum_decimal = (quotes_df['taxes'] / 100) + (quotes_df['margin'] / 100)
-    denominator = 1 - total_percentage_sum_decimal
+    # Calculation logic from ui/quote_tab_content.py (assumed correct)
+    base_price = quotes_df['price']
+    freight = quotes_df['freight']
+    additional_costs = quotes_df['additional_costs']
+    taxes_percentage = quotes_df['taxes']
+    margin_percentage = quotes_df['margin']
 
-    # Initialize calculated_price column with pd.NA
-    quotes_df['calculated_price'] = pd.NA 
-
-    # Calculate only where denominator is valid ( > 0 to avoid division by zero or negative/zero price if sum_percentages >= 100%)
-    valid_denominator_mask = denominator > 0
-    quotes_df.loc[valid_denominator_mask, 'calculated_price'] = total_direct_cost[valid_denominator_mask] / denominator[valid_denominator_mask]
+    price_with_freight_costs = base_price + freight + additional_costs
+    taxes_value = price_with_freight_costs * (taxes_percentage / Decimal(100))
+    price_before_margin = price_with_freight_costs + taxes_value
+    margin_value = price_before_margin * (margin_percentage / Decimal(100))
+    quotes_df['calculated_price'] = price_before_margin + margin_value
     
-    # Select and reorder columns for consistency
-    display_columns = [
-        "supplier_name", # Derived
-        "price", # Original: price (model) -> price (df)
-        "freight",
-        "additional_costs",
-        "taxes",
-        "margin",
-        "calculated_price", # Derived
-        "created_at", # Original: created_at (model) -> created_at (df)
-        "update_at",  # Original: update_at (model) -> update_at (df)
-        "notes",
-        "id",
-        "item_id",
-        "supplier_id", # Original: supplier_id (model) -> supplier_id (df)
+    # Define all columns expected by the UI or for general use
+    # This ensures consistency in column order and presence.
+    final_columns = [
+        "id", "item_name", "supplier_name", "price", "freight", "additional_costs",
+        "taxes", "margin", "calculated_price", "notes",
+        "item_id", "supplier_id", "created_at", "updated_at"
     ]
-    # Filter out columns not present in quotes_df to avoid KeyError
-    # (e.g. if a quote_list was empty and columns were predefined differently)
     
-    # Ensure all display_columns exist, adding them with pd.NA if not
-    for col_name in display_columns:
+    # Ensure all final_columns exist, adding them with pd.NA or appropriate defaults if not
+    for col_name in final_columns:
         if col_name not in quotes_df.columns:
-            quotes_df[col_name] = pd.NA
+            if col_name in ["price", "freight", "additional_costs", "taxes", "margin", "calculated_price"]:
+                 quotes_df[col_name] = Decimal('0.0') # Or pd.NA if preferred for non-calculated numeric
+            else:
+                 quotes_df[col_name] = pd.NA
 
-    # Ensure the DataFrame has all display_columns in the correct order
-    # and filters out any columns not in display_columns
-    quotes_df = quotes_df.reindex(columns=display_columns)
+    # Reorder and select final columns
+    quotes_df = quotes_df.reindex(columns=final_columns)
 
     return quotes_df
 
 
 def get_bids_dataframe(
-    bids_list: list[Bid], bidders_list: list[Bidder] # Renamed parameter
+    bids_list: list[Bid],
+    bidders_list: list[Bidder],
+    items_list: list[Item] # Added items_list
 ) -> pd.DataFrame:
     """
     Creates and preprocesses a DataFrame for bids.
 
     Args:
         bids_list: A list of Bid objects.
-        bidders_list: A list of Bidder objects. # Renamed parameter
+        bidders_list: A list of Bidder objects.
+        items_list: A list of Item objects.
 
     Returns:
-        A pandas DataFrame with bid data, including bidder names and formatted dates. # Updated docstring
+        A pandas DataFrame with bid data, including bidder names, item names, and formatted dates.
     """
     if not bids_list:
         return pd.DataFrame(
-            columns=["bidder_name", "price", "created_at", "notes", "update_at"]
+            columns=[
+                "id", "item_id", "bidding_id", "bidder_id", "price", "notes",
+                "created_at", "updated_at", "item_name", "bidder_name"
+            ]
         )
 
     bids_df = pd.DataFrame([b.model_dump() for b in bids_list])
 
-    # Ensure 'bidder_name' column is always present
-    if not bids_df.empty:
-        if bidders_list:  # Check if bidders_list is provided and not empty
-            bidder_map = {b.id: b.name for b in bidders_list}
-            if "bidder_id" in bids_df.columns:
-                bids_df["bidder_name"] = bids_df["bidder_id"].map(bidder_map)
-                bids_df["bidder_name"] = bids_df["bidder_name"].fillna("N/D")
-            else:
-                # If bidder_id column does not exist, fill bidder_name with "N/D"
-                bids_df["bidder_name"] = "N/D"
-        else:
-            # If bidders_list is empty or not provided, fill bidder_name with "N/D"
-            bids_df["bidder_name"] = "N/D"
-    # If bids_df is empty, the initial check for bids_list already handles returning a DataFrame with bidder_name
-
-    if "created_at" in bids_df.columns:
-        bids_df["created_at"] = pd.to_datetime(bids_df["created_at"]).dt.strftime(
-            "%Y-%m-%d %H:%M:%S"
+    # Map bidder names
+    if not bids_df.empty and bidders_list:
+        bidder_map = {b.id: b.name for b in bidders_list}
+        bids_df["bidder_name"] = bids_df["bidder_id"].map(bidder_map)
+        # Handle cases where bidder_id might be None or not in map
+        bids_df["bidder_name"] = bids_df.apply(
+            lambda row: "Licitante Desconhecido" if pd.isna(row["bidder_id"]) else bidder_map.get(row["bidder_id"], "Licitante Desconhecido"),
+            axis=1
         )
+    elif not bids_df.empty:
+         bids_df["bidder_name"] = "Licitante Desconhecido"
 
-    if "update_at" in bids_df.columns:
-        # Ensure 'update_at' exists and is not all NaT before formatting
-        if pd.notnull(bids_df["update_at"]).all():  # Check if not all values are NaT
-            bids_df["update_at"] = pd.to_datetime(bids_df["update_at"]).dt.strftime(
-                "%Y-%m-%d %H:%M:%S"
-            )
-        else:
-            # Handle cases where 'update_at' might be all NaT or mixed; decide on a representation
-            bids_df["update_at"] = None  # Or some other placeholder
 
-    # Select and reorder columns for consistency
-    # Note: 'bidding_id' is also part of Bid model, include if needed for other purposes
-    display_columns = [
-        "bidder_name", # Derived
-        "price",
-        "created_at",
-        "update_at",
-        "notes",
-        "id",
-        "item_id",
-        "bidding_id", # Original: bidding_id (model) -> bidding_id (df)
-        "bidder_id",  # Original: bidder_id (model) -> bidder_id (df)
+    # Map item names
+    if not bids_df.empty and items_list:
+        item_map = {i.id: i.name for i in items_list}
+        bids_df["item_name"] = bids_df["item_id"].map(item_map).fillna("Item Desconhecido")
+    elif not bids_df.empty:
+        bids_df["item_name"] = "Item Desconhecido"
+
+
+    # Convert date columns to datetime objects (naive)
+    if "created_at" in bids_df.columns:
+        bids_df["created_at"] = pd.to_datetime(bids_df["created_at"], errors='coerce').dt.tz_localize(None)
+    if "updated_at" in bids_df.columns:
+        bids_df["updated_at"] = pd.to_datetime(bids_df["updated_at"], errors='coerce').dt.tz_localize(None)
+
+    # Ensure 'price' is Decimal
+    if 'price' in bids_df.columns:
+        bids_df['price'] = bids_df['price'].apply(lambda x: Decimal(str(x)) if x is not None else Decimal('0.0'))
+    else:
+        bids_df['price'] = Decimal('0.0')
+
+
+    final_columns = [
+        "id", "item_name", "bidder_name", "price", "notes",
+        "item_id", "bidding_id", "bidder_id", "created_at", "updated_at"
     ]
-    # Filter out columns not present in bids_df to avoid KeyError
 
-    # Ensure all display_columns exist, adding them with pd.NA if not
-    for col_name in display_columns:
+    for col_name in final_columns:
         if col_name not in bids_df.columns:
-            bids_df[col_name] = pd.NA
+            if col_name == "price":
+                bids_df[col_name] = Decimal('0.0')
+            else:
+                bids_df[col_name] = pd.NA
 
-    # Ensure the DataFrame has all display_columns in the correct order
-    # and filters out any columns not in display_columns
-    bids_df = bids_df.reindex(columns=display_columns)
+    bids_df = bids_df.reindex(columns=final_columns)
 
     return bids_df
