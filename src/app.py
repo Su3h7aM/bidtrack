@@ -523,11 +523,11 @@ def show_main_view():
                                 try:
                                     quote_id_to_delete = int(quote_id_str) # Assuming quote IDs are integers
                                     quote_repo.delete(quote_id_to_delete)
-                                changes_made = True
-                                st.success(f"Orçamento ID {quote_id_to_delete} removido com sucesso.")
-                            except ValueError:
-                                st.error(f"ID inválido para remoção: {quote_id_str}.")
-                            except Exception as e:
+                                    changes_made = True
+                                    st.success(f"Orçamento ID {quote_id_to_delete} removido com sucesso.")
+                                except ValueError:
+                                    st.error(f"ID inválido para remoção: {quote_id_str}.")
+                                except Exception as e:
                                 st.error(f"Erro ao remover orçamento ID {quote_id_str}: {e}")
 
                         # ADDITIONS and UPDATES
