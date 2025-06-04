@@ -30,7 +30,7 @@ def show_management_tables_view(
 
     tab_labels = ["Licitações", "Itens", "Fornecedores", "Orçamentos", "Licitantes", "Lances"]
     
-    # Create tabs
+
     tabs = st.tabs(tab_labels)
 
     # Assign content to each tab by calling the respective display function
