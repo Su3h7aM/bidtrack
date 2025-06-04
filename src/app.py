@@ -119,22 +119,25 @@ def show_main_view():
         if "quotes_editor_main_view" not in st.session_state or "original_quotes_df" not in st.session_state:
             return # Not ready for processing
 
-        edited_quotes_df = st.session_state.quotes_editor_main_view
-        original_quotes_df = st.session_state.original_quotes_df
+        edited_quotes_data = st.session_state.quotes_editor_main_view
+        original_quotes_data = st.session_state.original_quotes_df # This is already a DataFrame
 
-        if original_quotes_df is None or edited_quotes_df is None: # Should not happen if initialized
+        if original_quotes_data is None or edited_quotes_data is None:
             return
 
-        # The st.data_editor returns a list of dicts when num_rows="dynamic" and changes are made.
-        # We need to convert this list of dicts back to a DataFrame to compare.
-        # Important: The key 'quotes_editor_main_view' holds the *current state* of the editor.
-        # For comparison, we need the DataFrame that was *initially passed* to the editor,
-        # which we've stored in st.session_state.original_quotes_df.
-        # The edited_quotes_df from session state is already the edited version.
+        # Ensure both are DataFrames
+        # edited_quotes_data from data_editor can be a list of dicts or already a DataFrame
+        if not isinstance(edited_quotes_data, pd.DataFrame):
+            edited_quotes_df = pd.DataFrame(edited_quotes_data)
+        else:
+            edited_quotes_df = edited_quotes_data
 
-        # Ensure edited_quotes_df is a DataFrame
-        if isinstance(edited_quotes_df, list): # data_editor can return list of dicts
-            edited_quotes_df = pd.DataFrame(edited_quotes_df)
+        # original_quotes_data should already be a DataFrame if set correctly via get_quotes_dataframe().copy(),
+        # but this ensures it if it was somehow altered or if the source changes.
+        if not isinstance(original_quotes_data, pd.DataFrame):
+            original_quotes_df = pd.DataFrame(original_quotes_data)
+        else:
+            original_quotes_df = original_quotes_data
 
         if original_quotes_df.empty and edited_quotes_df.empty:
             return
@@ -237,14 +240,22 @@ def show_main_view():
         if "bids_editor_main_view" not in st.session_state or "original_bids_df" not in st.session_state:
             return
 
-        edited_bids_df = st.session_state.bids_editor_main_view
-        original_bids_df = st.session_state.original_bids_df
+        edited_bids_data = st.session_state.bids_editor_main_view
+        original_bids_data = st.session_state.original_bids_df # This is already a DataFrame
 
-        if original_bids_df is None or edited_bids_df is None:
+        if original_bids_data is None or edited_bids_data is None:
             return
 
-        if isinstance(edited_bids_df, list): # data_editor can return list of dicts
-            edited_bids_df = pd.DataFrame(edited_bids_df)
+        # Ensure both are DataFrames
+        if not isinstance(edited_bids_data, pd.DataFrame):
+            edited_bids_df = pd.DataFrame(edited_bids_data)
+        else:
+            edited_bids_df = edited_bids_data
+
+        if not isinstance(original_bids_data, pd.DataFrame):
+            original_bids_df = pd.DataFrame(original_bids_data)
+        else:
+            original_bids_df = original_bids_data
 
         if original_bids_df.empty and edited_bids_df.empty:
             return
@@ -762,53 +773,49 @@ def show_main_view():
                     st.subheader("Gráficos")
                     graph_cols_display = st.columns(2)
                     with graph_cols_display[0]:
-                        # Use the DataFrame from session state for plotting, as it reflects the latest data
-                        current_quotes_for_plot = st.session_state.get("quotes_editor_main_view", pd.DataFrame())
-                        if isinstance(current_quotes_for_plot, list): # Convert if it's list of dicts
-                            current_quotes_for_plot = pd.DataFrame(current_quotes_for_plot)
+                        edited_quotes_data_for_plot = st.session_state.get('quotes_editor_main_view', pd.DataFrame())
+                        if not isinstance(edited_quotes_data_for_plot, pd.DataFrame):
+                            edited_quotes_df_for_plot = pd.DataFrame(edited_quotes_data_for_plot)
+                        else:
+                            edited_quotes_df_for_plot = edited_quotes_data_for_plot
 
                         if (
-                            not current_quotes_for_plot.empty
-                            and "calculated_price" in current_quotes_for_plot.columns
-                            and "supplier_name" in current_quotes_for_plot.columns
+                            not edited_quotes_df_for_plot.empty
+                            and "calculated_price" in edited_quotes_df_for_plot.columns
+                            and "supplier_name" in edited_quotes_df_for_plot.columns
                         ):
                             st.plotly_chart(
-                                create_quotes_figure(current_quotes_for_plot),
+                                create_quotes_figure(edited_quotes_df_for_plot),
                                 use_container_width=True,
                             )
                         else:
                             st.caption("Gráfico de orçamentos não disponível.")
                     with graph_cols_display[1]:
-                        current_bids_for_plot = st.session_state.get("bids_editor_main_view", pd.DataFrame())
-                        if isinstance(current_bids_for_plot, list): # Convert if it's list of dicts
-                           current_bids_for_plot = pd.DataFrame(current_bids_for_plot)
+                        original_bids_data_for_plot = st.session_state.get('original_bids_df', pd.DataFrame())
+                        if not isinstance(original_bids_data_for_plot, pd.DataFrame):
+                            original_bids_df_for_plot = pd.DataFrame(original_bids_data_for_plot)
+                        else:
+                            original_bids_df_for_plot = original_bids_data_for_plot
 
-                        # For bids chart, we also need original_bids_df if created_at is only there
-                        # Or ensure 'created_at' is carried to edited_bids_df if needed by create_bids_figure
-                        # The create_bids_figure uses 'created_at'. The data_editor might drop it if not in column_config.
-                        # Let's use original_bids_df for plotting bids to ensure 'created_at' is present if it was there initially.
-                        # Or, more robustly, ensure 'created_at' is part of the dataframe given to the editor and plot.
-                        # For now, using original_bids_df (from st.session_state) for plotting bids.
-
-                        bids_df_for_plot = st.session_state.original_bids_df # Use the one from session state
-                        quotes_df_for_min_price = current_quotes_for_plot # From above
+                        # For min_quote_price_val, use the already processed edited_quotes_df_for_plot from above
+                        # This was previously quotes_df_for_min_price = current_quotes_for_plot
 
                         if (
-                            bids_df_for_plot is not None # Check if it exists
-                            and not bids_df_for_plot.empty
-                            and "price" in bids_df_for_plot.columns
-                            and "bidder_name" in bids_df_for_plot.columns
-                            and "created_at" in bids_df_for_plot.columns
+                            original_bids_df_for_plot is not None # Check if it exists (it will be an empty DF if not found by .get)
+                            and not original_bids_df_for_plot.empty
+                            and "price" in original_bids_df_for_plot.columns
+                            and "bidder_name" in original_bids_df_for_plot.columns
+                            and "created_at" in original_bids_df_for_plot.columns
                         ):
                             min_quote_price_val = ( 
-                                quotes_df_for_min_price["calculated_price"].min()
-                                if quotes_df_for_min_price is not None and not quotes_df_for_min_price.empty
-                                and "calculated_price" in quotes_df_for_min_price.columns
+                                edited_quotes_df_for_plot["calculated_price"].min() # Use the processed quotes df
+                                if edited_quotes_df_for_plot is not None and not edited_quotes_df_for_plot.empty
+                                and "calculated_price" in edited_quotes_df_for_plot.columns
                                 else None
                             )
                             st.plotly_chart(
                                 create_bids_figure(
-                                    bids_df_for_plot, min_quote_price_val
+                                    original_bids_df_for_plot, min_quote_price_val
                                 ),
                                 use_container_width=True,
                             )
