@@ -455,141 +455,239 @@ def show_main_view():
 
                     # --- Callback functions for data editor changes ---
                     def save_quotes_changes():
-                        """Saves changes made to the quotes data editor."""
+                        """Saves changes made to the quotes data editor, handling additions, updates, and deletions."""
                         changes_made = False
                         editable_quote_cols = ['price', 'freight', 'additional_costs', 'taxes', 'margin', 'notes']
 
-                        # Get and convert edited data safely
+                        # 1. Data Preparation
                         edited_data = st.session_state.get('quotes_editor_main_view')
+                        current_editor_df = None
                         if isinstance(edited_data, pd.DataFrame):
-                            edited_quotes_df_from_state = edited_data
+                            current_editor_df = edited_data
                         elif isinstance(edited_data, list):
-                            edited_quotes_df_from_state = pd.DataFrame(edited_data)
+                            try:
+                                current_editor_df = pd.DataFrame(edited_data)
+                            except Exception: # Broad exception for conversion issues
+                                current_editor_df = pd.DataFrame()
                         else:
-                            edited_quotes_df_from_state = pd.DataFrame() # Default to empty DataFrame
+                            current_editor_df = pd.DataFrame() # Handles None, dict, etc.
 
-                        if not edited_quotes_df_from_state.empty:
-                            for editor_idx, edited_row_series in edited_quotes_df_from_state.iterrows():
-                                # Ensure 'id' column exists, which should be the case if data editor is populated
-                                if 'id' not in edited_row_series:
-                                    st.error(f"Erro: Coluna 'id' não encontrada na linha editada do orçamento. Índice da linha: {editor_idx}")
-                                    continue # Skip this row if 'id' is missing
-                                quote_id = edited_row_series['id']
-                                original_row_df_filtered = original_quotes_df[original_quotes_df['id'] == quote_id]
+                        # Use original_quotes_df as the baseline from when the editor was loaded
+                        original_df_for_comparison = original_quotes_df
 
-                                if original_row_df_filtered.empty:
-                                    st.error(f"Erro: Orçamento original com ID {quote_id} não encontrado para comparação.")
+                        # Ensure 'id' columns are present and of a consistent type for comparison
+                        # Convert to string to handle potential mixed types or NaN issues safely in set operations
+                        # And dropna for IDs from current_editor_df as new rows might not have valid IDs yet
+                        if 'id' in original_df_for_comparison.columns:
+                            original_ids = set(original_df_for_comparison['id'].dropna().astype(str))
+                        else:
+                            original_ids = set()
+                            st.error("Coluna 'id' não encontrada no DataFrame original de orçamentos.")
+                            return # Cannot proceed without IDs in original data
+
+                        if 'id' in current_editor_df.columns:
+                            current_ids = set(current_editor_df['id'].dropna().astype(str))
+                        else:
+                            # If current_editor_df is empty or malformed (e.g. from invalid list) it might not have 'id'
+                            # Treat as if all original IDs are to be deleted if current_editor_df has no IDs and originals exist
+                            current_ids = set()
+                            if not current_editor_df.empty: # Only warn if it's not empty but lacks 'id'
+                                st.warning("Edit_quotes: Coluna 'id' ausente nos dados do editor, pode levar a comportamento inesperado.")
+
+
+                        # 3. Identify Changes
+                        # DELETIONS
+                        ids_to_delete = original_ids - current_ids
+                        for quote_id_str in ids_to_delete:
+                            try:
+                                quote_id_to_delete = int(quote_id_str) # Assuming quote IDs are integers
+                                quote_repo.delete(quote_id_to_delete)
+                                changes_made = True
+                                st.success(f"Orçamento ID {quote_id_to_delete} removido com sucesso.")
+                            except ValueError:
+                                st.error(f"ID inválido para remoção: {quote_id_str}.")
+                            except Exception as e:
+                                st.error(f"Erro ao remover orçamento ID {quote_id_str}: {e}")
+
+                        # ADDITIONS and UPDATES
+                        for index, edited_row in current_editor_df.iterrows():
+                            edited_row_id_original = edited_row.get('id') # Could be NaN, None, or a value
+                            edited_row_id_str = str(edited_row_id_original) if pd.notna(edited_row_id_original) else ""
+
+                            if pd.isna(edited_row_id_original) or not edited_row_id_str or edited_row_id_str not in original_ids:
+                                # ADDITION attempt
+                                # As supplier_id is missing, additions via this table are not supported.
+                                # Only show a warning if the row seems to contain some data, not for completely empty new rows.
+                                if not edited_row.drop('id', errors='ignore').isnull().all(): # Check if other fields have data
+                                    st.warning(
+                                        f"Adicionar novos orçamentos diretamente na tabela não é suportado devido à ausência de seleção de fornecedor. "
+                                        f"Use o formulário 'Novo Orçamento'. Linha ignorada: {edited_row.to_dict()}"
+                                    )
+                            else:
+                                # UPDATE
+                                # Find the original row using the string version of ID for robust comparison
+                                original_row_series_df = original_df_for_comparison[original_df_for_comparison['id'].astype(str) == edited_row_id_str]
+                                if original_row_series_df.empty:
+                                    st.error(f"Erro crítico: ID {edited_row_id_str} do editor não encontrado no original para atualização.")
                                     continue
-                                original_row_series = original_row_df_filtered.iloc[0]
+                                original_row = original_row_series_df.iloc[0]
 
                                 update_dict = {}
                                 for col in editable_quote_cols:
-                                    if col not in edited_row_series.index:
-                                        st.warning(f"Coluna editável '{col}' não encontrada na linha editada do orçamento ID {quote_id}.")
-                                        continue
-                                    if col not in original_row_series.index:
-                                        st.warning(f"Coluna editável '{col}' não encontrada na linha original do orçamento ID {quote_id}.")
-                                        continue
-
-                                    original_value = original_row_series[col]
-                                    edited_value = edited_row_series[col]
+                                    original_value = original_row[col]
+                                    edited_value = edited_row[col]
 
                                     if col in ["price", "freight", "additional_costs", "taxes", "margin"]:
                                         try:
-                                            if edited_value is None or (isinstance(edited_value, str) and not edited_value.strip()):
-                                                edited_value_decimal = None
+                                            # Convert original to Decimal, carefully handling None
+                                            if original_value is None or (isinstance(original_value, str) and not original_value.strip()):
+                                                original_decimal = None
                                             else:
-                                                edited_value_decimal = Decimal(str(edited_value))
+                                                original_decimal = Decimal(str(original_value))
 
-                                            if original_value is None and edited_value_decimal is None:
-                                                pass
-                                            elif original_value is None and edited_value_decimal == Decimal(0) and col in ["freight", "additional_costs", "taxes"]:
-                                                update_dict[col] = Decimal(0)
-                                            elif original_value != edited_value_decimal:
-                                                update_dict[col] = edited_value_decimal
+                                            # Convert edited to Decimal, carefully handling None and empty strings
+                                            if edited_value is None or (isinstance(edited_value, str) and not str(edited_value).strip()):
+                                                edited_decimal = None
+                                            else:
+                                                edited_decimal = Decimal(str(edited_value))
+
+                                            # Compare, allowing for None == None
+                                            if original_decimal != edited_decimal:
+                                                update_dict[col] = edited_decimal # Store as Decimal
                                         except ValueError:
-                                            st.error(f"Valor inválido para {col} (decimal) no orçamento ID {quote_id}: '{edited_value}'.")
-                                            continue
-                                        except Exception as e:
-                                            st.error(f"Erro ao converter {col} no orçamento ID {quote_id}: {edited_value}. Erro: {e}")
-                                            continue
-                                    elif original_value != edited_value:
-                                        update_dict[col] = edited_value
+                                            st.error(f"Valor inválido para campo decimal {col} no orçamento ID {edited_row_id_str}: '{edited_value}'. Alteração ignorada.")
+                                        except Exception as e: # Other conversion errors
+                                            st.error(f"Erro ao processar campo {col} no orçamento ID {edited_row_id_str}: {e}. Alteração ignorada.")
+
+                                    elif original_value != edited_value: # For non-decimal fields like 'notes'
+                                        # Ensure NaN from editor (if field cleared) becomes None for DB
+                                        update_dict[col] = None if pd.isna(edited_value) else edited_value
 
                                 if update_dict:
                                     try:
-                                        quote_repo.update(quote_id, update_dict)
-                                        st.success(f"Orçamento ID {quote_id} atualizado com sucesso.")
+                                        # Ensure ID is int for the repository
+                                        quote_id_to_update = int(edited_row_id_str)
+                                        quote_repo.update(quote_id_to_update, update_dict)
                                         changes_made = True
+                                        st.success(f"Orçamento ID {quote_id_to_update} atualizado com sucesso.")
+                                    except ValueError:
+                                        st.error(f"ID inválido para atualização: {edited_row_id_str}.")
                                     except Exception as e:
-                                        st.error(f"Erro ao atualizar orçamento ID {quote_id}: {e}. Dados: {update_dict}")
+                                        st.error(f"Erro ao atualizar orçamento ID {edited_row_id_str}: {e}. Dados: {update_dict}")
+
                         if changes_made:
                             st.rerun()
 
                     def save_bids_changes():
-                        """Saves changes made to the bids data editor."""
+                        """Saves changes made to the bids data editor, handling additions, updates, and deletions."""
                         changes_made = False
                         editable_bid_cols = ['price', 'notes']
 
-                        # Get and convert edited data safely
+                        # 1. Data Preparation
                         edited_bids_data = st.session_state.get('bids_editor_main_view')
+                        current_editor_df = None
                         if isinstance(edited_bids_data, pd.DataFrame):
-                            edited_bids_df_from_state = edited_bids_data
+                            current_editor_df = edited_bids_data
                         elif isinstance(edited_bids_data, list):
-                            edited_bids_df_from_state = pd.DataFrame(edited_bids_data)
+                            try:
+                                current_editor_df = pd.DataFrame(edited_bids_data)
+                            except Exception: # Broad exception for conversion issues
+                                current_editor_df = pd.DataFrame()
                         else:
-                            edited_bids_df_from_state = pd.DataFrame() # Default to empty DataFrame
+                            current_editor_df = pd.DataFrame() # Handles None, dict, etc.
 
-                        if not edited_bids_df_from_state.empty:
-                            for editor_idx, edited_row_series in edited_bids_df_from_state.iterrows():
-                                # Ensure 'id' column exists
-                                if 'id' not in edited_row_series:
-                                    st.error(f"Erro: Coluna 'id' não encontrada na linha editada do lance. Índice da linha: {editor_idx}")
-                                    continue # Skip this row
-                                bid_id = edited_row_series['id']
-                                original_row_df_filtered = original_bids_df[original_bids_df['id'] == bid_id]
+                        original_df_for_comparison = original_bids_df # Baseline from editor load
 
-                                if original_row_df_filtered.empty:
-                                    st.error(f"Erro: Lance original com ID {bid_id} não encontrado para comparação.")
+                        # Ensure 'id' columns are present and of a consistent type for comparison
+                        if 'id' in original_df_for_comparison.columns:
+                            original_ids = set(original_df_for_comparison['id'].dropna().astype(str))
+                        else:
+                            original_ids = set()
+                            st.error("Coluna 'id' não encontrada no DataFrame original de lances.")
+                            return
+
+                        if 'id' in current_editor_df.columns:
+                            current_ids = set(current_editor_df['id'].dropna().astype(str))
+                        else:
+                            current_ids = set()
+                            if not current_editor_df.empty:
+                                st.warning("Edit_bids: Coluna 'id' ausente nos dados do editor.")
+
+                        # 3. Identify Changes
+                        # DELETIONS
+                        ids_to_delete = original_ids - current_ids
+                        for bid_id_str in ids_to_delete:
+                            try:
+                                bid_id_to_delete = int(bid_id_str) # Assuming bid IDs are integers
+                                bid_repo.delete(bid_id_to_delete)
+                                changes_made = True
+                                st.success(f"Lance ID {bid_id_to_delete} removido com sucesso.")
+                            except ValueError:
+                                st.error(f"ID inválido para remoção de lance: {bid_id_str}.")
+                            except Exception as e:
+                                st.error(f"Erro ao remover lance ID {bid_id_str}: {e}")
+
+                        # ADDITIONS and UPDATES
+                        for index, edited_row in current_editor_df.iterrows():
+                            edited_row_id_original = edited_row.get('id')
+                            edited_row_id_str = str(edited_row_id_original) if pd.notna(edited_row_id_original) else ""
+
+                            if pd.isna(edited_row_id_original) or not edited_row_id_str or edited_row_id_str not in original_ids:
+                                # ADDITION attempt
+                                if not edited_row.drop('id', errors='ignore').isnull().all():
+                                    st.warning(
+                                        f"Adicionar novos lances diretamente na tabela não é suportado devido à ausência de seleção de licitante. "
+                                        f"Use o formulário 'Novo Lance'. Linha ignorada: {edited_row.to_dict()}"
+                                    )
+                            else:
+                                # UPDATE
+                                original_row_series_df = original_df_for_comparison[original_df_for_comparison['id'].astype(str) == edited_row_id_str]
+                                if original_row_series_df.empty:
+                                    st.error(f"Erro crítico: ID de lance {edited_row_id_str} do editor não encontrado no original para atualização.")
                                     continue
-                                original_row_series = original_row_df_filtered.iloc[0]
+                                original_row = original_row_series_df.iloc[0]
 
                                 update_dict = {}
                                 for col in editable_bid_cols:
-                                    if col not in edited_row_series.index:
-                                        st.warning(f"Coluna editável '{col}' não encontrada na linha editada do lance ID {bid_id}.")
-                                        continue
-                                    if col not in original_row_series.index:
-                                        st.warning(f"Coluna editável '{col}' não encontrada na linha original do lance ID {bid_id}.")
-                                        continue
-
-                                    original_value = original_row_series[col]
-                                    edited_value = edited_row_series[col]
+                                    original_value = original_row[col]
+                                    edited_value = edited_row[col]
 
                                     if col == "price":
                                         try:
                                             if edited_value is None or (isinstance(edited_value, str) and not str(edited_value).strip()):
-                                                st.error(f"Preço não pode ser vazio para o lance ID {bid_id}.")
-                                                continue
-                                            edited_value_decimal = Decimal(str(edited_value))
-                                            if original_value != edited_value_decimal:
-                                                update_dict[col] = edited_value_decimal
-                                        except ValueError:
-                                            st.error(f"Valor inválido para preço no lance ID {bid_id}: '{edited_value}'.")
-                                            continue
-                                        except Exception as e:
-                                            st.error(f"Erro ao converter preço no lance ID {bid_id}: {edited_value}. Erro: {e}")
-                                            continue
-                                    elif original_value != edited_value:
-                                        update_dict[col] = edited_value
+                                                # Price is required for bids, throw error if empty
+                                                st.error(f"Preço não pode ser vazio para o lance ID {edited_row_id_str}. Alteração ignorada.")
+                                                update_dict.clear() # Prevent partial update for this row
+                                                break # Stop processing this row's columns
 
-                                if update_dict:
+                                            original_decimal = Decimal(str(original_value)) if original_value is not None else None
+                                            edited_decimal = Decimal(str(edited_value)) # Price cannot be None here
+
+                                            if original_decimal != edited_decimal:
+                                                update_dict[col] = edited_decimal
+                                        except ValueError:
+                                            st.error(f"Valor inválido para preço no lance ID {edited_row_id_str}: '{edited_value}'. Alteração ignorada.")
+                                            update_dict.clear()
+                                            break
+                                        except Exception as e:
+                                            st.error(f"Erro ao processar preço no lance ID {edited_row_id_str}: {e}. Alteração ignorada.")
+                                            update_dict.clear()
+                                            break
+                                    elif col == "notes": # For 'notes'
+                                        if original_value != edited_value:
+                                            update_dict[col] = None if pd.isna(edited_value) else edited_value
+
+                                if update_dict: # Check if any valid changes were collected for this row
                                     try:
-                                        bid_repo.update(bid_id, update_dict)
-                                        st.success(f"Lance ID {bid_id} atualizado com sucesso.")
+                                        bid_id_to_update = int(edited_row_id_str)
+                                        bid_repo.update(bid_id_to_update, update_dict)
                                         changes_made = True
+                                        st.success(f"Lance ID {bid_id_to_update} atualizado com sucesso.")
+                                    except ValueError:
+                                        st.error(f"ID inválido para atualização de lance: {edited_row_id_str}.")
                                     except Exception as e:
-                                        st.error(f"Erro ao atualizar lance ID {bid_id}: {e}. Dados: {update_dict}")
+                                        st.error(f"Erro ao atualizar lance ID {edited_row_id_str}: {e}. Dados: {update_dict}")
+
                         if changes_made:
                             st.rerun()
 
@@ -679,17 +777,28 @@ def show_main_view():
                     st.subheader("Gráficos")
                     graph_cols_display = st.columns(2)
                     with graph_cols_display[0]:
-                        # Safely get and convert quotes data for the graph
-                        quotes_data_source = st.session_state.get("quotes_editor_main_view")
-                        if isinstance(quotes_data_source, pd.DataFrame):
-                            quotes_df_for_graph = quotes_data_source
-                        elif isinstance(quotes_data_source, list):
-                            quotes_df_for_graph = pd.DataFrame(quotes_data_source)
-                        # Fallback to original_quotes_df only if it's a DataFrame
-                        elif quotes_data_source is None and isinstance(original_quotes_df, pd.DataFrame):
+                        # Revised logic for quotes_df_for_graph
+                        quotes_data_from_session = st.session_state.get("quotes_editor_main_view")
+                        temp_quotes_df = None
+
+                        if isinstance(quotes_data_from_session, pd.DataFrame):
+                            temp_quotes_df = quotes_data_from_session
+                        elif isinstance(quotes_data_from_session, list):
+                            try: # Attempt to convert list of dicts
+                                temp_quotes_df = pd.DataFrame(quotes_data_from_session)
+                            except Exception: # If conversion fails, treat as invalid
+                                temp_quotes_df = None
+
+                        original_is_valid_df = isinstance(original_quotes_df, pd.DataFrame)
+
+                        if temp_quotes_df is not None and not temp_quotes_df.empty:
+                            quotes_df_for_graph = temp_quotes_df
+                        elif original_is_valid_df and not original_quotes_df.empty:
                             quotes_df_for_graph = original_quotes_df
-                        else:
-                            quotes_df_for_graph = pd.DataFrame() # Default to empty DataFrame
+                        elif original_is_valid_df: # Original is DataFrame but might be empty
+                            quotes_df_for_graph = original_quotes_df
+                        else: # Fallback if original is also not a valid df
+                            quotes_df_for_graph = pd.DataFrame()
 
                         if (
                             not quotes_df_for_graph.empty
@@ -703,16 +812,28 @@ def show_main_view():
                         else:
                             st.caption("Gráfico de orçamentos não disponível.")
                     with graph_cols_display[1]:
-                        # Safely get and convert bids data for the graph emptiness check
-                        bids_data_source = st.session_state.get("bids_editor_main_view")
-                        if isinstance(bids_data_source, pd.DataFrame):
-                            bids_df_for_graph = bids_data_source
-                        elif isinstance(bids_data_source, list):
-                            bids_df_for_graph = pd.DataFrame(bids_data_source)
-                        elif bids_data_source is None and isinstance(original_bids_df, pd.DataFrame):
-                            bids_df_for_graph = original_bids_df # Fallback to original_bids_df
-                        else:
-                            bids_df_for_graph = pd.DataFrame() # Default to empty DataFrame
+                        # Revised logic for bids_df_for_graph
+                        bids_data_from_session = st.session_state.get("bids_editor_main_view")
+                        temp_bids_df = None
+
+                        if isinstance(bids_data_from_session, pd.DataFrame):
+                            temp_bids_df = bids_data_from_session
+                        elif isinstance(bids_data_from_session, list):
+                            try: # Attempt to convert list of dicts
+                                temp_bids_df = pd.DataFrame(bids_data_from_session)
+                            except Exception: # If conversion fails, treat as invalid
+                                temp_bids_df = None
+
+                        original_bids_is_valid_df = isinstance(original_bids_df, pd.DataFrame)
+
+                        if temp_bids_df is not None and not temp_bids_df.empty:
+                            bids_df_for_graph = temp_bids_df
+                        elif original_bids_is_valid_df and not original_bids_df.empty:
+                            bids_df_for_graph = original_bids_df
+                        elif original_bids_is_valid_df: # Original is DataFrame but might be empty
+                            bids_df_for_graph = original_bids_df
+                        else: # Fallback if original is also not a valid df
+                            bids_df_for_graph = pd.DataFrame()
 
                         if (
                             not bids_df_for_graph.empty # This check is now safer
