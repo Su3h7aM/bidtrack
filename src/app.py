@@ -432,11 +432,18 @@ def show_main_view():
                     all_bids_from_repo = bid_repo.get_all()
                     bids_for_item_list = [b for b in all_bids_from_repo if b.item_id == st.session_state.selected_item_id]
 
+                    # Ensure all_items_list is available for get_quotes_dataframe
+                    all_items_list = item_repo.get_all() # Fetch all items
                     quotes_for_item_df_display = get_quotes_dataframe(
-                        quotes_for_item_list, all_suppliers
+                        quotes_list=quotes_for_item_list,
+                        suppliers_list=all_suppliers,
+                        items_list=all_items_list # Pass all_items_list
                     )
+                    # Ensure all_items_list is available for get_bids_dataframe (already fetched for quotes)
                     bids_for_item_df_display = get_bids_dataframe(
-                        bids_for_item_list, all_bidders
+                        bids_list=bids_for_item_list,
+                        bidders_list=all_bidders,
+                        items_list=all_items_list # Pass all_items_list
                     )
 
                     table_cols_display = st.columns(2)

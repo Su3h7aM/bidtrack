@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from decimal import Decimal # Keep for column config if needed
 from ui.generic_entity_management import display_entity_management_ui
-from src.services.dataframes import get_bids_dataframe # Updated import
+from services.dataframes import get_bids_dataframe # Corrected import
 
 # Type hinting for repositories (optional but good practice)
 # from db.repositories import BidRepository, BiddingRepository, ItemRepository, BidderRepository

@@ -1,10 +1,10 @@
 import pytest
 from unittest.mock import MagicMock # Or namedtuple for simple objects
 
-from src.ui.utils import get_options_map
+from ui.utils import get_options_map # Corrected import
 # Import BiddingMode to get its value for the test, but avoid direct enum member access in test data
 # if the metadata issue is still present.
-from src.db.models import BiddingMode
+from db.models import BiddingMode # Corrected import
 
 # Simple mock object for testing
 class MockObject:
@@ -66,13 +66,16 @@ def test_get_options_map_with_extra_cols():
 
 def test_get_options_map_with_extra_cols_and_enum_workaround():
     # Using string value directly as a workaround for potential Enum metadata issues during test collection
-    national_competition_value = "Concorrência Nacional"
+    # Defaulting to actual enum value, but test will use string if direct access fails
+    national_competition_value = BiddingMode.PE.value # Using an actual valid enum member
     try:
-        # Attempt to get value from actual Enum if it's safe (i.e. models.py loaded correctly)
-        national_competition_value = BiddingMode.NATIONAL_COMPETITION.value
-    except AttributeError:
-        # Fallback to string if Enum access fails (as it did in error logs)
-        pass
+        # This line is mostly to ensure BiddingMode itself is usable.
+        # The actual value passed to MockObject will be the string.
+        if not isinstance(BiddingMode.PE, BiddingMode): # A bit of a tautology to use the Enum
+             national_competition_value = "Pregão Eletrônico" # Fallback if BiddingMode.PE is not BiddingMode
+    except AttributeError: # If BiddingMode.PE itself is not accessible due to metadata issues
+        national_competition_value = "Pregão Eletrônico"
+
 
     data = [
         MockObject(id=1, name="Bidding Gamma", city="Paris", mode=national_competition_value, process_number="P003"),

@@ -3,8 +3,8 @@ import pandas as pd
 from pandas.testing import assert_frame_equal
 from decimal import Decimal
 
-from src.db.models import Quote, Supplier, Item, Bid, Bidder # Assuming these are the model classes
-from src.services.dataframes import get_quotes_dataframe, get_bids_dataframe
+from db.models import Quote, Supplier, Item, Bid, Bidder # Corrected import
+from services.dataframes import get_quotes_dataframe, get_bids_dataframe # Corrected import
 
 # --- Fixtures for sample model instances ---
 

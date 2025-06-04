@@ -5,12 +5,12 @@ from unittest.mock import MagicMock, call
 from decimal import Decimal, InvalidOperation # Keep InvalidOperation for context, though ConversionSyntax is actual
 
 # Modules to test
-from src.ui.generic_entity_management import (
+from ui.generic_entity_management import ( # Corrected import
     load_and_prepare_data,
     display_search_box_and_filter_df,
     handle_save_changes,
 )
-from src.db.models import BiddingMode # For testing special_conversions
+from db.models import BiddingMode # Corrected import
 
 # --- Fixtures ---
 
@@ -21,7 +21,8 @@ def mock_repo():
 @pytest.fixture
 def mock_st(mocker):
     mock_st_obj = MagicMock()
-    mocker.patch('src.ui.generic_entity_management.st', mock_st_obj)
+    # Patching the correct location now that imports within the module under test are also src-relative
+    mocker.patch('ui.generic_entity_management.st', mock_st_obj)
     return mock_st_obj
 
 # --- Tests for load_and_prepare_data ---
@@ -208,12 +209,10 @@ def test_handle_save_decimal_conversion_invalid(mock_repo, mock_st, sample_origi
     )
     assert result
     mock_repo.update.assert_not_called()
-    # Adjusted to expect the actual stringified exception from the code
     mock_st.error.assert_called_once_with("Entity ID 1: Valor inválido para campo decimal 'value' ('invalid_decimal'): [<class 'decimal.ConversionSyntax'>].")
 
 def test_handle_save_special_conversion(mock_repo, mock_st, sample_original_df):
     edited_df = sample_original_df.copy()
-    # Original for ID 1 is PP. Change to PE.
     edited_df.loc[edited_df['id'] == 1, 'status_display'] = BiddingMode.PE.value
 
     result = handle_save_changes(
@@ -223,7 +222,7 @@ def test_handle_save_special_conversion(mock_repo, mock_st, sample_original_df):
             'status_display': {'target_field': 'status_code', 'conversion_func': BiddingMode}
         }
     )
-    assert result # This should now be true as a change occurred
+    assert result
     mock_repo.update.assert_called_once_with(1, {'status_code': BiddingMode.PE})
 
 def test_handle_save_fields_to_remove(mock_repo, mock_st, sample_original_df):
