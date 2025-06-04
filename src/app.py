@@ -665,11 +665,11 @@ def show_main_view():
                                 try:
                                     bid_id_to_delete = int(bid_id_str) # Assuming bid IDs are integers
                                     bid_repo.delete(bid_id_to_delete)
-                                changes_made = True
-                                st.success(f"Lance ID {bid_id_to_delete} removido com sucesso.")
-                            except ValueError:
-                                st.error(f"ID inválido para remoção de lance: {bid_id_str}.")
-                            except Exception as e:
+                                    changes_made = True
+                                    st.success(f"Lance ID {bid_id_to_delete} removido com sucesso.")
+                                except ValueError:
+                                    st.error(f"ID inválido para remoção de lance: {bid_id_str}.")
+                                except Exception as e:
                                 st.error(f"Erro ao remover lance ID {bid_id_str}: {e}")
 
                         # ADDITIONS and UPDATES
