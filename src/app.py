@@ -458,10 +458,22 @@ def show_main_view():
                         """Saves changes made to the quotes data editor."""
                         changes_made = False
                         editable_quote_cols = ['price', 'freight', 'additional_costs', 'taxes', 'margin', 'notes']
-                        edited_quotes_df_from_state = st.session_state.quotes_editor_main_view
+
+                        # Get and convert edited data safely
+                        edited_data = st.session_state.get('quotes_editor_main_view')
+                        if isinstance(edited_data, pd.DataFrame):
+                            edited_quotes_df_from_state = edited_data
+                        elif isinstance(edited_data, list):
+                            edited_quotes_df_from_state = pd.DataFrame(edited_data)
+                        else:
+                            edited_quotes_df_from_state = pd.DataFrame() # Default to empty DataFrame
 
                         if not edited_quotes_df_from_state.empty:
                             for editor_idx, edited_row_series in edited_quotes_df_from_state.iterrows():
+                                # Ensure 'id' column exists, which should be the case if data editor is populated
+                                if 'id' not in edited_row_series:
+                                    st.error(f"Erro: Coluna 'id' não encontrada na linha editada do orçamento. Índice da linha: {editor_idx}")
+                                    continue # Skip this row if 'id' is missing
                                 quote_id = edited_row_series['id']
                                 original_row_df_filtered = original_quotes_df[original_quotes_df['id'] == quote_id]
 
@@ -518,10 +530,22 @@ def show_main_view():
                         """Saves changes made to the bids data editor."""
                         changes_made = False
                         editable_bid_cols = ['price', 'notes']
-                        edited_bids_df_from_state = st.session_state.bids_editor_main_view
+
+                        # Get and convert edited data safely
+                        edited_bids_data = st.session_state.get('bids_editor_main_view')
+                        if isinstance(edited_bids_data, pd.DataFrame):
+                            edited_bids_df_from_state = edited_bids_data
+                        elif isinstance(edited_bids_data, list):
+                            edited_bids_df_from_state = pd.DataFrame(edited_bids_data)
+                        else:
+                            edited_bids_df_from_state = pd.DataFrame() # Default to empty DataFrame
 
                         if not edited_bids_df_from_state.empty:
                             for editor_idx, edited_row_series in edited_bids_df_from_state.iterrows():
+                                # Ensure 'id' column exists
+                                if 'id' not in edited_row_series:
+                                    st.error(f"Erro: Coluna 'id' não encontrada na linha editada do lance. Índice da linha: {editor_idx}")
+                                    continue # Skip this row
                                 bid_id = edited_row_series['id']
                                 original_row_df_filtered = original_bids_df[original_bids_df['id'] == bid_id]
 
@@ -655,8 +679,18 @@ def show_main_view():
                     st.subheader("Gráficos")
                     graph_cols_display = st.columns(2)
                     with graph_cols_display[0]:
-                        # Use st.session_state.quotes_editor_main_view for graph data if available, else original_quotes_df
-                        quotes_df_for_graph = st.session_state.get("quotes_editor_main_view", original_quotes_df)
+                        # Safely get and convert quotes data for the graph
+                        quotes_data_source = st.session_state.get("quotes_editor_main_view")
+                        if isinstance(quotes_data_source, pd.DataFrame):
+                            quotes_df_for_graph = quotes_data_source
+                        elif isinstance(quotes_data_source, list):
+                            quotes_df_for_graph = pd.DataFrame(quotes_data_source)
+                        # Fallback to original_quotes_df only if it's a DataFrame
+                        elif quotes_data_source is None and isinstance(original_quotes_df, pd.DataFrame):
+                            quotes_df_for_graph = original_quotes_df
+                        else:
+                            quotes_df_for_graph = pd.DataFrame() # Default to empty DataFrame
+
                         if (
                             not quotes_df_for_graph.empty
                             and "calculated_price" in quotes_df_for_graph.columns
@@ -669,10 +703,19 @@ def show_main_view():
                         else:
                             st.caption("Gráfico de orçamentos não disponível.")
                     with graph_cols_display[1]:
-                        # Use st.session_state.bids_editor_main_view for graph data if available, else original_bids_df
-                        bids_df_for_graph = st.session_state.get("bids_editor_main_view", original_bids_df)
+                        # Safely get and convert bids data for the graph emptiness check
+                        bids_data_source = st.session_state.get("bids_editor_main_view")
+                        if isinstance(bids_data_source, pd.DataFrame):
+                            bids_df_for_graph = bids_data_source
+                        elif isinstance(bids_data_source, list):
+                            bids_df_for_graph = pd.DataFrame(bids_data_source)
+                        elif bids_data_source is None and isinstance(original_bids_df, pd.DataFrame):
+                            bids_df_for_graph = original_bids_df # Fallback to original_bids_df
+                        else:
+                            bids_df_for_graph = pd.DataFrame() # Default to empty DataFrame
+
                         if (
-                            not bids_df_for_graph.empty
+                            not bids_df_for_graph.empty # This check is now safer
                             and "price" in bids_df_for_graph.columns
                             and "bidder_name" in bids_df_for_graph.columns
                             # 'created_at' is on original_bids_df, if bids_df_for_graph is from session_state it might not have it
