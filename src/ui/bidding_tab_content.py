@@ -83,5 +83,6 @@ def display_biddings_tab(bidding_repo): # bidding_repo: BiddingRepository
         fields_to_remove_before_update=["mode_display"],
         custom_data_processing_hook=prepare_biddings_dataframe_hook,
         editor_key_suffix="biddings",
-        is_editable=False # Set to read-only
+        is_editable=True, # Biddings table is editable
+        auto_save=True    # Enable auto-save for Biddings table
     )

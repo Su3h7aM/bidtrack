@@ -597,31 +597,31 @@ def show_main_view():
                     graph_cols_display = st.columns(2)
                     with graph_cols_display[0]:
                         if (
-                            not quotes_for_item_df_display.empty
-                            and "calculated_price" in quotes_for_item_df_display.columns 
-                            and "supplier_name" in quotes_for_item_df_display.columns
+                            not edited_quotes_df.empty  # Use edited_quotes_df
+                            and "calculated_price" in edited_quotes_df.columns
+                            and "supplier_name" in edited_quotes_df.columns
                         ):
                             st.plotly_chart(
-                                create_quotes_figure(quotes_for_item_df_display),
+                                create_quotes_figure(edited_quotes_df), # Use edited_quotes_df
                                 use_container_width=True,
                             )
                         else:
                             st.caption("Gráfico de orçamentos não disponível.")
                     with graph_cols_display[1]:
                         if (
-                            not bids_for_item_df_display.empty
-                            and "price" in bids_for_item_df_display.columns
-                            and "bidder_name" in bids_for_item_df_display.columns 
+                            not edited_bids_df.empty # Use edited_bids_df
+                            and "price" in edited_bids_df.columns
+                            and "bidder_name" in edited_bids_df.columns
                         ):
                             min_quote_price_val = ( 
-                                quotes_for_item_df_display["calculated_price"].min()
-                                if not quotes_for_item_df_display.empty
-                                and "calculated_price" in quotes_for_item_df_display.columns
+                                edited_quotes_df["calculated_price"].min() # Use edited_quotes_df
+                                if not edited_quotes_df.empty
+                                and "calculated_price" in edited_quotes_df.columns
                                 else None
                             )
                             st.plotly_chart(
                                 create_bids_figure(
-                                    bids_for_item_df_display, min_quote_price_val
+                                    edited_bids_df, min_quote_price_val # Use edited_bids_df
                                 ),
                                 use_container_width=True,
                             )

@@ -261,7 +261,8 @@ def display_entity_management_ui(
     foreign_key_selection_configs: list[dict] = None,
     custom_dataframe_preparation_func: callable = None,
     custom_data_processing_hook: callable = None,
-    is_editable: bool = True # New parameter
+    is_editable: bool = True,
+    auto_save: bool = False # New parameter for auto-save
 ):
     if required_fields is None: required_fields = []
     if decimal_fields is None: decimal_fields = []
@@ -340,20 +341,53 @@ def display_entity_management_ui(
     )
     original_df_for_save = df_filtered.copy() if df_filtered is not None else pd.DataFrame()
 
-    # Pass is_editable to display_data_editor
+    # df_filtered is the state of data after loading, (optional) custom processing, and search filtering.
+    # This is the data that should be displayed in the editor.
+    df_to_pass_to_editor = df_filtered if df_filtered is not None else pd.DataFrame()
+
+    session_key_orig_df = f'{editor_key_suffix}_orig_df_for_autosave'
+
+    if is_editable and auto_save:
+        # Initialize session state for original DataFrame if not present or if data might have reloaded
+        # A more robust reload detection might be needed if df_to_pass_to_editor can change identity
+        # without other widget interactions causing a rerun.
+        if session_key_orig_df not in st.session_state or not st.session_state[session_key_orig_df].shape == df_to_pass_to_editor.shape:
+             # Basic check, might need refinement if df structure changes but data is same
+            st.session_state[session_key_orig_df] = df_to_pass_to_editor.copy()
+
+        # Ensure that df_to_pass_to_editor for the editor is actually the version from session state
+        # if we expect it to be persistent across reruns before this point.
+        # However, df_to_pass_to_editor is derived from upstream, so it *is* the current "original" for this render.
+        # The session state one is the "previous original" to compare against for auto-save.
+
     edited_df = display_data_editor(
-        df_to_edit=df_filtered if df_filtered is not None else pd.DataFrame(),
+        df_to_edit=df_to_pass_to_editor, # Use the consistently prepared DataFrame
         column_config=column_config,
-        editor_key_suffix=key_suffix,
-        is_editable=is_editable # Pass down
+        editor_key_suffix=editor_key_suffix, # Use the specific editor_key_suffix
+        is_editable=is_editable
     )
 
-    # Conditionally show save button and handle changes
     if is_editable:
-        if st.button(f"Salvar Alterações em {entity_name_plural}", key=f"save_{key_suffix}"):
-            if edited_df is not None and not edited_df.empty:
+        if auto_save:
+            previous_df_state = st.session_state.get(session_key_orig_df)
+            # Make sure previous_df_state is not None and has 'id' if not empty, similar for edited_df
+            can_compare = True
+            if previous_df_state is None:
+                can_compare = False
+            if not previous_df_state.empty and 'id' not in previous_df_state.columns:
+                 # This should not happen if load_and_prepare_data works correctly
+                # st.warning(f"Auto-save: Previous state for {entity_name_plural} is missing 'id' column.")
+                can_compare = False
+            if not edited_df.empty and 'id' not in edited_df.columns:
+                # This should not happen if display_data_editor's input had 'id'
+                # st.warning(f"Auto-save: Edited data for {entity_name_plural} is missing 'id' column.")
+                can_compare = False
+
+            if can_compare and not edited_df.equals(previous_df_state):
+                # original_df_for_save for auto-save should be the state *before* the current edit cycle began,
+                # which is what we stored in session_state.
                 if handle_save_changes(
-                    original_df=original_df_for_save,
+                    original_df=previous_df_state, # Use the state from before this potential edit
                     edited_df=edited_df,
                     repository=repository,
                     entity_name_singular=entity_name_singular,
@@ -363,6 +397,28 @@ def display_entity_management_ui(
                     special_conversions=special_conversions,
                     fields_to_remove_before_update=fields_to_remove_before_update
                 ):
-                    st.rerun()
-            elif original_df_for_save.empty and (edited_df is None or edited_df.empty):
-                 st.info(f"Nenhum dado para salvar em {entity_name_plural}.")
+                    # If changes were successfully processed, update the stored "original" state
+                    st.session_state[session_key_orig_df] = edited_df.copy()
+                    st.rerun() # Rerun to reflect saved changes and clear editor's internal state
+        else: # Manual save button
+            # original_df_for_save is a fresh copy of df_filtered before editor display for this render cycle
+            if st.button(f"Salvar Alterações em {entity_name_plural}", key=f"save_{key_suffix}"):
+                if edited_df is not None: # edited_df can be None if df_to_pass_to_editor was None/empty
+                    if handle_save_changes(
+                        original_df=original_df_for_save, # Use df_filtered from current render cycle
+                        edited_df=edited_df,
+                        repository=repository,
+                        entity_name_singular=entity_name_singular,
+                        editable_columns=editable_columns,
+                        required_fields=required_fields,
+                        decimal_fields=decimal_fields,
+                        special_conversions=special_conversions,
+                        fields_to_remove_before_update=fields_to_remove_before_update
+                    ):
+                        # After manual save, update the session state if auto-save might be used later
+                        # or if other parts of app rely on this session state.
+                        # For now, let's assume manual save doesn't need to interact with session_key_orig_df
+                        # unless auto_save can be dynamically toggled for the same component instance.
+                        st.rerun()
+                elif original_df_for_save.empty and (edited_df is None or edited_df.empty):
+                     st.info(f"Nenhum dado para salvar em {entity_name_plural}.")
