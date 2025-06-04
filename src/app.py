@@ -467,7 +467,7 @@ def show_main_view():
                                 "created_at": None, # Hide 'created_at'
                                 "updated_at": None, # Hide 'updated_at'
 
-                                "item_name": st.column_config.TextColumn("Item", disabled=True, help="Nome do item (não editável aqui)"),
+                                "item_name": None, # Hide "Item" column by default
                                 "supplier_name": st.column_config.TextColumn("Fornecedor", disabled=True, help="Nome do fornecedor (não editável aqui)"),
                                 "price": st.column_config.NumberColumn("Custo Base (R$)", format="%.2f", required=True, help="Preço de custo do produto/serviço junto ao fornecedor."),
                                 "freight": st.column_config.NumberColumn("Frete (R$)", format="%.2f", help="Valor do frete."),
@@ -573,7 +573,7 @@ def show_main_view():
                                 "created_at": None, # Hide 'created_at'
                                 "updated_at": None, # Hide 'updated_at'
 
-                                "item_name": st.column_config.TextColumn("Item", disabled=True, help="Nome do item (não editável aqui)."),
+                                "item_name": None, # Hide "Item" column by default
                                 "bidder_name": st.column_config.TextColumn("Licitante", disabled=True, help="Nome do licitante (não editável aqui)."),
                                 "price": st.column_config.NumberColumn("Preço Ofertado (R$)", format="R$ %.2f", min_value=0.01, required=True, help="Valor do lance ofertado."),
                                 "notes": st.column_config.TextColumn("Notas", help="Observações sobre o lance."),
