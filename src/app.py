@@ -456,52 +456,73 @@ def show_main_view():
                     # --- Callback functions for data editor changes ---
                     def save_quotes_changes():
                         """Saves changes made to the quotes data editor, handling additions, updates, and deletions."""
+                        st.write("DEBUG: Entering save_quotes_changes")
+                        raw_editor_data = st.session_state.get('quotes_editor_main_view')
+                        st.write("DEBUG: raw_editor_data from session_state:", raw_editor_data)
+                        # st.write("DEBUG: original_quotes_df (snapshot before editor call):", original_quotes_df) # Avoid if huge
+                        st.write("DEBUG: Type of original_quotes_df:", type(original_quotes_df))
+                        if isinstance(original_quotes_df, pd.DataFrame):
+                            st.write("DEBUG: original_quotes_df shape:", original_quotes_df.shape)
+                            st.write("DEBUG: original_quotes_df IDs (head):", original_quotes_df['id'].head().tolist() if 'id' in original_quotes_df.columns else "No 'id' column in original_quotes_df")
+
                         changes_made = False
                         editable_quote_cols = ['price', 'freight', 'additional_costs', 'taxes', 'margin', 'notes']
 
                         # 1. Data Preparation
-                        edited_data = st.session_state.get('quotes_editor_main_view')
+                        # raw_editor_data already fetched for debugging
                         current_editor_df = None
-                        if isinstance(edited_data, pd.DataFrame):
-                            current_editor_df = edited_data
-                        elif isinstance(edited_data, list):
+                        if isinstance(raw_editor_data, pd.DataFrame):
+                            current_editor_df = raw_editor_data
+                        elif isinstance(raw_editor_data, list):
                             try:
-                                current_editor_df = pd.DataFrame(edited_data)
+                                current_editor_df = pd.DataFrame(raw_editor_data)
                             except Exception: # Broad exception for conversion issues
                                 current_editor_df = pd.DataFrame()
                         else:
                             current_editor_df = pd.DataFrame() # Handles None, dict, etc.
 
+                        st.write("DEBUG: current_editor_df type:", type(current_editor_df))
+                        if isinstance(current_editor_df, pd.DataFrame):
+                            st.write("DEBUG: current_editor_df shape:", current_editor_df.shape)
+                            st.write("DEBUG: current_editor_df IDs (head):", current_editor_df['id'].head().tolist() if 'id' in current_editor_df.columns else "No 'id' column in current_editor_df")
+                            st.write("DEBUG: current_editor_df data (head):", current_editor_df.head())
+                        else:
+                            st.write("DEBUG: current_editor_df is not a DataFrame.")
+
                         # Use original_quotes_df as the baseline from when the editor was loaded
                         original_df_for_comparison = original_quotes_df
 
                         # Ensure 'id' columns are present and of a consistent type for comparison
-                        # Convert to string to handle potential mixed types or NaN issues safely in set operations
-                        # And dropna for IDs from current_editor_df as new rows might not have valid IDs yet
-                        if 'id' in original_df_for_comparison.columns:
+                        original_ids = set()
+                        if isinstance(original_df_for_comparison, pd.DataFrame) and 'id' in original_df_for_comparison.columns:
                             original_ids = set(original_df_for_comparison['id'].dropna().astype(str))
-                        else:
-                            original_ids = set()
-                            st.error("Coluna 'id' não encontrada no DataFrame original de orçamentos.")
-                            return # Cannot proceed without IDs in original data
+                        else: # original_df_for_comparison might not be a DataFrame if no items were loaded
+                            st.warning("DEBUG: original_df_for_comparison is not a DataFrame or lacks 'id' column.")
+                            # No return here, as original_ids will be empty, and logic should proceed (e.g. if current_editor_df has new rows)
+                        st.write("DEBUG: original_ids set:", original_ids)
 
-                        if 'id' in current_editor_df.columns:
+                        current_ids = set()
+                        if isinstance(current_editor_df, pd.DataFrame) and 'id' in current_editor_df.columns:
                             current_ids = set(current_editor_df['id'].dropna().astype(str))
-                        else:
-                            # If current_editor_df is empty or malformed (e.g. from invalid list) it might not have 'id'
-                            # Treat as if all original IDs are to be deleted if current_editor_df has no IDs and originals exist
-                            current_ids = set()
-                            if not current_editor_df.empty: # Only warn if it's not empty but lacks 'id'
-                                st.warning("Edit_quotes: Coluna 'id' ausente nos dados do editor, pode levar a comportamento inesperado.")
-
+                        st.write("DEBUG: current_ids set:", current_ids)
 
                         # 3. Identify Changes
                         # DELETIONS
                         ids_to_delete = original_ids - current_ids
-                        for quote_id_str in ids_to_delete:
-                            try:
-                                quote_id_to_delete = int(quote_id_str) # Assuming quote IDs are integers
-                                quote_repo.delete(quote_id_to_delete)
+                        st.write("DEBUG: ids_to_delete set:", ids_to_delete)
+
+                        if ids_to_delete: # Only proceed if there's something to delete
+                            # SAFETY CHECK:
+                            if not current_ids and isinstance(raw_editor_data, dict) and raw_editor_data:
+                                st.error("ERRO CRÍTICO PREVENIDO: Tentativa de exclusão em massa devido a estado inesperado do editor (raw_editor_data é dict não vazio, resultando em current_ids vazio). Nenhuma alteração foi salva. Por favor, recarregue e verifique os dados.")
+                                st.stop()
+                                return
+
+                            st.write(f"DEBUG: Proceeding with deleting IDs: {ids_to_delete}")
+                            for quote_id_str in ids_to_delete:
+                                try:
+                                    quote_id_to_delete = int(quote_id_str) # Assuming quote IDs are integers
+                                    quote_repo.delete(quote_id_to_delete)
                                 changes_made = True
                                 st.success(f"Orçamento ID {quote_id_to_delete} removido com sucesso.")
                             except ValueError:
@@ -580,46 +601,70 @@ def show_main_view():
 
                     def save_bids_changes():
                         """Saves changes made to the bids data editor, handling additions, updates, and deletions."""
+                        st.write("DEBUG: Entering save_bids_changes")
+                        raw_editor_data_bids = st.session_state.get('bids_editor_main_view')
+                        st.write("DEBUG: raw_editor_data_bids from session_state:", raw_editor_data_bids)
+                        st.write("DEBUG: Type of original_bids_df:", type(original_bids_df))
+                        if isinstance(original_bids_df, pd.DataFrame):
+                            st.write("DEBUG: original_bids_df shape:", original_bids_df.shape)
+                            st.write("DEBUG: original_bids_df IDs (head):", original_bids_df['id'].head().tolist() if 'id' in original_bids_df.columns else "No 'id' column in original_bids_df")
+
                         changes_made = False
                         editable_bid_cols = ['price', 'notes']
 
                         # 1. Data Preparation
-                        edited_bids_data = st.session_state.get('bids_editor_main_view')
+                        # raw_editor_data_bids already fetched for debugging
                         current_editor_df = None
-                        if isinstance(edited_bids_data, pd.DataFrame):
-                            current_editor_df = edited_bids_data
-                        elif isinstance(edited_bids_data, list):
+                        if isinstance(raw_editor_data_bids, pd.DataFrame):
+                            current_editor_df = raw_editor_data_bids
+                        elif isinstance(raw_editor_data_bids, list):
                             try:
-                                current_editor_df = pd.DataFrame(edited_bids_data)
+                                current_editor_df = pd.DataFrame(raw_editor_data_bids)
                             except Exception: # Broad exception for conversion issues
                                 current_editor_df = pd.DataFrame()
                         else:
                             current_editor_df = pd.DataFrame() # Handles None, dict, etc.
 
+                        st.write("DEBUG: current_editor_df (bids) type:", type(current_editor_df))
+                        if isinstance(current_editor_df, pd.DataFrame):
+                            st.write("DEBUG: current_editor_df (bids) shape:", current_editor_df.shape)
+                            st.write("DEBUG: current_editor_df (bids) IDs (head):", current_editor_df['id'].head().tolist() if 'id' in current_editor_df.columns else "No 'id' column in current_editor_df (bids)")
+                            st.write("DEBUG: current_editor_df (bids) data (head):", current_editor_df.head())
+                        else:
+                            st.write("DEBUG: current_editor_df (bids) is not a DataFrame.")
+
                         original_df_for_comparison = original_bids_df # Baseline from editor load
 
                         # Ensure 'id' columns are present and of a consistent type for comparison
-                        if 'id' in original_df_for_comparison.columns:
+                        original_ids = set()
+                        if isinstance(original_df_for_comparison, pd.DataFrame) and 'id' in original_df_for_comparison.columns:
                             original_ids = set(original_df_for_comparison['id'].dropna().astype(str))
                         else:
-                            original_ids = set()
-                            st.error("Coluna 'id' não encontrada no DataFrame original de lances.")
-                            return
+                            st.warning("DEBUG: original_df_for_comparison (bids) is not a DataFrame or lacks 'id' column.")
+                        st.write("DEBUG: original_ids_bids set:", original_ids)
 
-                        if 'id' in current_editor_df.columns:
+                        current_ids = set()
+                        if isinstance(current_editor_df, pd.DataFrame) and 'id' in current_editor_df.columns:
                             current_ids = set(current_editor_df['id'].dropna().astype(str))
-                        else:
-                            current_ids = set()
-                            if not current_editor_df.empty:
-                                st.warning("Edit_bids: Coluna 'id' ausente nos dados do editor.")
+                        st.write("DEBUG: current_ids_bids set:", current_ids)
 
                         # 3. Identify Changes
                         # DELETIONS
                         ids_to_delete = original_ids - current_ids
-                        for bid_id_str in ids_to_delete:
-                            try:
-                                bid_id_to_delete = int(bid_id_str) # Assuming bid IDs are integers
-                                bid_repo.delete(bid_id_to_delete)
+                        st.write("DEBUG: ids_to_delete_bids set:", ids_to_delete)
+
+                        if ids_to_delete: # Only proceed if there's something to delete
+                            # SAFETY CHECK for bids:
+                            if not current_ids and isinstance(raw_editor_data_bids, dict) and raw_editor_data_bids:
+                                st.error("ERRO CRÍTICO PREVENIDO (LANCES): Tentativa de exclusão em massa devido a estado inesperado do editor. Nenhuma alteração foi salva. Por favor, recarregue.")
+                                st.stop()
+                                return
+
+                            st.write(f"DEBUG: Proceeding with deleting bid IDs: {ids_to_delete}")
+                            for bid_id_str in ids_to_delete:
+                                try:
+                                    bid_id_to_delete = int(bid_id_str) # Assuming bid IDs are integers
+                                    bid_repo.delete(bid_id_to_delete)
                                 changes_made = True
                                 st.success(f"Lance ID {bid_id_to_delete} removido com sucesso.")
                             except ValueError:
