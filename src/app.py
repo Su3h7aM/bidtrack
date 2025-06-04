@@ -538,31 +538,26 @@ def show_main_view():
                                 "notes": st.column_config.TextColumn("Notas"),
                             }
 
-                            # Pass the DataFrame with 'id' as index to st.data_editor
-                            # st.data_editor will use the DataFrame's index.
                             edited_bids_df_indexed = st.data_editor(
-                                df_bids_for_display, # This DataFrame does NOT have id, item_id etc. as columns
+                                df_bids_for_display,
                                 column_config=column_config_bids_main,
                                 key="bids_editor_main_view",
                                 use_container_width=True,
                                 num_rows="dynamic"
-                                # Not hiding index, so `id` from original_bids_df_indexed (which was used to create df_bids_for_display's index) is available
                             )
-
                             if st.button("Salvar Alterações nos Lances", key="save_bids_main_view"):
                                 changes_made = False
-                                for bid_id, edited_row_series in edited_bids_df_indexed.iterrows(): # bid_id is the index from df_bids_for_display
-                                    # original_row_series must be fetched from the DataFrame that still has all columns
+                                for bid_id, edited_row_series in edited_bids_df_indexed.iterrows():
                                     original_row_series = original_bids_df_indexed.loc[bid_id]
 
                                     update_dict = {}
-                                    # Editable columns are the columns present in df_bids_for_display (and thus in edited_row_series)
-                                    # that are not explicitly disabled for editing (like item_name, bidder_name)
                                     editable_bid_cols = ["price", "notes"]
 
                                     for col in editable_bid_cols:
-                                        original_value = original_row_series[col] # Access original values from the full DataFrame
-                                        edited_value = edited_row_series[col]   # Access edited values from the (potentially partial) row series
+                                        if col not in edited_row_series.index:
+                                            continue
+                                        original_value = original_row_series[col]
+                                        edited_value = edited_row_series[col]
 
                                         if col == "price":
                                             try:
@@ -570,7 +565,7 @@ def show_main_view():
                                                     st.error(f"Preço não pode ser vazio para o lance ID {bid_id}.")
                                                     continue
                                                 edited_value_decimal = Decimal(str(edited_value))
-                                                if original_value != edited_value_decimal: # original_value is already Decimal from get_bids_dataframe
+                                                if original_value != edited_value_decimal:
                                                     update_dict[col] = edited_value_decimal
                                             except (TypeError, ValueError, InvalidOperation) as e:
                                                 st.error(f"Valor inválido para preço no lance ID {bid_id}: '{edited_value}'. Erro: {e}")
@@ -605,23 +600,23 @@ def show_main_view():
                         else:
                             st.caption("Gráfico de orçamentos não disponível.")
                     with graph_cols_display[1]:
-                        # Use original_bids_df_indexed for the chart data to ensure 'created_at' is present
+                        # Use original_bids_df for the chart data to ensure 'created_at' is present
                         # and for the emptiness check related to plotting.
                         if (
-                            not original_bids_df_indexed.empty # Changed to original_bids_df_indexed
-                            and "price" in original_bids_df_indexed.columns
-                            and "bidder_name" in original_bids_df_indexed.columns
-                            and "created_at" in original_bids_df_indexed.columns # Ensure created_at is checked
+                            not original_bids_df.empty # Changed to original_bids_df
+                            and "price" in original_bids_df.columns
+                            and "bidder_name" in original_bids_df.columns
+                            and "created_at" in original_bids_df.columns # Ensure created_at is checked on original_bids_df
                         ):
                             min_quote_price_val = ( 
                                 edited_quotes_df_indexed["calculated_price"].min()
-                                if not edited_quotes_df_indexed.empty
+                                if not edited_quotes_df_indexed.empty # This refers to quotes, and is fine
                                 and "calculated_price" in edited_quotes_df_indexed.columns
                                 else None
                             )
                             st.plotly_chart(
                                 create_bids_figure(
-                                    original_bids_df_indexed.reset_index(), min_quote_price_val # Changed to original_bids_df_indexed
+                                    original_bids_df, min_quote_price_val # Changed to original_bids_df
                                 ),
                                 use_container_width=True,
                             )
