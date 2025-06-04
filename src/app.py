@@ -457,17 +457,16 @@ def show_main_view():
                     with table_cols_display[0]:
                         st.markdown("##### Orçamentos do Item")
                         if not original_quotes_df.empty:
-                            # 1. Prepare Indexed Original DataFrame
-                            original_quotes_df_indexed = original_quotes_df.set_index('id', drop=False)
+                            # original_quotes_df is the direct output of get_quotes_dataframe (all columns, 'id' is a column)
 
-                            # 2. Define Columns to Hide and Create Display DataFrame
-                            quotes_columns_to_hide = ['id', 'item_id', 'supplier_id', 'created_at', 'updated_at']
-                            # Filter to only include columns that actually exist in the DataFrame to avoid errors
-                            quotes_columns_to_hide_existing = [col for col in quotes_columns_to_hide if col in original_quotes_df_indexed.columns]
-                            df_quotes_for_display = original_quotes_df_indexed.drop(columns=quotes_columns_to_hide_existing, errors='ignore')
+                            # 2. Update column_config_quotes_main
+                            column_config_quotes_main = {
+                                "id": None,  # Hide 'id' column by default
+                                "item_id": None, # Hide 'item_id'
+                                "supplier_id": None, # Hide 'supplier_id'
+                                "created_at": None, # Hide 'created_at'
+                                "updated_at": None, # Hide 'updated_at'
 
-                            # 3. Update column_config_quotes_main
-                            column_config_quotes_main_all_options = {
                                 "item_name": st.column_config.TextColumn("Item", disabled=True, help="Nome do item (não editável aqui)"),
                                 "supplier_name": st.column_config.TextColumn("Fornecedor", disabled=True, help="Nome do fornecedor (não editável aqui)"),
                                 "price": st.column_config.NumberColumn("Custo Base (R$)", format="%.2f", required=True, help="Preço de custo do produto/serviço junto ao fornecedor."),
@@ -478,44 +477,46 @@ def show_main_view():
                                 "calculated_price": st.column_config.NumberColumn("Preço Final Calculado", format="R$ %.2f", disabled=True, help="Preço final de venda (calculado automaticamente)."),
                                 "notes": st.column_config.TextColumn("Notas", help="Observações sobre o orçamento."),
                             }
-                            # Filter column_config_quotes_main to only include keys present in df_quotes_for_display.columns
-                            column_config_quotes_main = {k: v for k, v in column_config_quotes_main_all_options.items() if k in df_quotes_for_display.columns}
+                            # Ensure all columns from original_quotes_df are present in config, adding None if missing
+                            for col_name in original_quotes_df.columns:
+                                if col_name not in column_config_quotes_main:
+                                    column_config_quotes_main[col_name] = None # Hide unspecified columns by default
 
-                            # 4. Verify st.data_editor Call
-                            # The output of data_editor will have its own index (usually range index if hide_index=True)
-                            edited_quotes_df_from_editor = st.data_editor(
-                                df_quotes_for_display,
+                            # 1. DataFrame for Editor: Pass original_quotes_df
+                            # hide_index=True means edited_quotes_df will have a range index. 'id' will be a column in edited_quotes_df.
+                            edited_quotes_df = st.data_editor(
+                                original_quotes_df, # Pass the full original DataFrame
                                 column_config=column_config_quotes_main,
                                 key="quotes_editor_main_view",
                                 use_container_width=True,
-                                hide_index=True, # Important: this means edited_df will have a new range index
+                                hide_index=True,
                                 num_rows="dynamic"
                             )
 
                             if st.button("Salvar Alterações nos Orçamentos", key="save_quotes_main_view"):
                                 changes_made = False
-                                # 5. Verify Save Logic
-                                # Map the edited rows (which have a simple range index) back to the original quote_ids
-                                # This relies on the assumption that the order of rows in df_quotes_for_display
-                                # (and thus in edited_quotes_df_from_editor) matches the order in original_quotes_df_indexed.
-                                if not edited_quotes_df_from_editor.empty:
-                                    ids_for_edited_rows = original_quotes_df_indexed.iloc[edited_quotes_df_from_editor.index]['id']
+                                # 3. Update Save Logic for Quotes
+                                editable_quote_cols = ['price', 'freight', 'additional_costs', 'taxes', 'margin', 'notes']
 
-                                    for editor_idx, edited_row_series in edited_quotes_df_from_editor.iterrows():
-                                        quote_id = ids_for_edited_rows[editor_idx] # Get the original quote_id using the editor's index
-                                        original_row_series = original_quotes_df_indexed.loc[quote_id]
+                                if not edited_quotes_df.empty:
+                                    for editor_idx, edited_row_series in edited_quotes_df.iterrows(): # editor_idx is range index
+                                        quote_id = edited_row_series['id'] # Get 'id' from the row data
+
+                                        # Find the original row from original_quotes_df (the DataFrame before editor)
+                                        original_row_df_filtered = original_quotes_df[original_quotes_df['id'] == quote_id]
+
+                                        if original_row_df_filtered.empty:
+                                            st.error(f"Erro: Orçamento original com ID {quote_id} não encontrado para comparação.")
+                                            continue
+                                        original_row_series = original_row_df_filtered.iloc[0]
 
                                         update_dict = {}
-                                        # editable_quote_cols must only contain column names also present in df_quotes_for_display (and thus in edited_row_series)
-                                        editable_quote_cols = [
-                                            col for col in df_quotes_for_display.columns
-                                            if col not in ['item_name', 'supplier_name', 'calculated_price'] # Non-editable display fields
-                                        ]
-
                                         for col in editable_quote_cols:
-                                            # Ensure the column exists in both series to prevent KeyErrors, though direct iteration on editor's columns is safer
-                                            if col not in original_row_series.index or col not in edited_row_series.index:
-                                                st.warning(f"Coluna {col} não encontrada consistentemente para orçamento {quote_id}. Pulando.")
+                                            if col not in edited_row_series.index: # Should not happen if editable_quote_cols is correct
+                                                st.warning(f"Coluna editável '{col}' não encontrada na linha editada do orçamento ID {quote_id}.")
+                                                continue
+                                            if col not in original_row_series.index: # Should not happen
+                                                st.warning(f"Coluna editável '{col}' não encontrada na linha original do orçamento ID {quote_id}.")
                                                 continue
 
                                             original_value = original_row_series[col]
@@ -561,55 +562,62 @@ def show_main_view():
                     with table_cols_display[1]:
                         st.markdown("##### Lances do Item")
                         if not original_bids_df.empty:
-                            # 1. Prepare Indexed Original DataFrame
-                            original_bids_df_indexed = original_bids_df.set_index('id', drop=False)
+                            # original_bids_df is the direct output of get_bids_dataframe (all columns, 'id' is a column)
 
-                            # 2. Define Columns to Hide and Create Display DataFrame
-                            bids_columns_to_hide = ['id', 'item_id', 'bidding_id', 'bidder_id', 'created_at', 'updated_at']
-                            # Filter to only include columns that actually exist in the DataFrame to avoid errors
-                            bids_columns_to_hide_existing = [col for col in bids_columns_to_hide if col in original_bids_df_indexed.columns]
-                            df_bids_for_display = original_bids_df_indexed.drop(columns=bids_columns_to_hide_existing, errors='ignore')
+                            # 2. Update column_config_bids_main
+                            column_config_bids_main = {
+                                "id": None, # Hide 'id' column by default
+                                "item_id": None, # Hide 'item_id'
+                                "bidding_id": None, # Hide 'bidding_id'
+                                "bidder_id": None, # Hide 'bidder_id'
+                                "created_at": None, # Hide 'created_at'
+                                "updated_at": None, # Hide 'updated_at'
 
-                            # 3. Update column_config_bids_main
-                            column_config_bids_main_all_options = {
                                 "item_name": st.column_config.TextColumn("Item", disabled=True, help="Nome do item (não editável aqui)."),
                                 "bidder_name": st.column_config.TextColumn("Licitante", disabled=True, help="Nome do licitante (não editável aqui)."),
-                                "price": st.column_config.NumberColumn("Preço Ofertado (R$)", format="%.2f", required=True, help="Valor do lance ofertado."),
+                                "price": st.column_config.NumberColumn("Preço Ofertado (R$)", format="R$ %.2f", min_value=0.01, required=True, help="Valor do lance ofertado."),
                                 "notes": st.column_config.TextColumn("Notas", help="Observações sobre o lance."),
                             }
-                            # Filter column_config_bids_main to only include keys present in df_bids_for_display.columns
-                            column_config_bids_main = {k: v for k, v in column_config_bids_main_all_options.items() if k in df_bids_for_display.columns}
+                            # Ensure all columns from original_bids_df are present in config, adding None if missing
+                            for col_name in original_bids_df.columns:
+                                if col_name not in column_config_bids_main:
+                                    column_config_bids_main[col_name] = None # Hide unspecified columns by default
 
-                            # 4. Verify st.data_editor Call
-                            edited_bids_df_from_editor = st.data_editor(
-                                df_bids_for_display,
+                            # 1. DataFrame for Editor: Pass original_bids_df
+                            # hide_index=True means edited_bids_df will have a range index. 'id' will be a column in edited_bids_df.
+                            edited_bids_df = st.data_editor(
+                                original_bids_df, # Pass the full original DataFrame
                                 column_config=column_config_bids_main,
                                 key="bids_editor_main_view",
                                 use_container_width=True,
-                                hide_index=True, # Important: this means edited_df will have a new range index
+                                hide_index=True,
                                 num_rows="dynamic"
                             )
 
                             if st.button("Salvar Alterações nos Lances", key="save_bids_main_view"):
                                 changes_made = False
-                                # 5. Verify Save Logic
-                                if not edited_bids_df_from_editor.empty:
-                                    ids_for_edited_rows = original_bids_df_indexed.iloc[edited_bids_df_from_editor.index]['id']
+                                # 3. Update Save Logic for Bids
+                                editable_bid_cols = ['price', 'notes']
 
-                                    for editor_idx, edited_row_series in edited_bids_df_from_editor.iterrows():
-                                        bid_id = ids_for_edited_rows[editor_idx] # Get the original bid_id
-                                        original_row_series = original_bids_df_indexed.loc[bid_id]
+                                if not edited_bids_df.empty:
+                                    for editor_idx, edited_row_series in edited_bids_df.iterrows(): # editor_idx is range index
+                                        bid_id = edited_row_series['id'] # Get 'id' from the row data
+
+                                        # Find the original row from original_bids_df (the DataFrame before editor)
+                                        original_row_df_filtered = original_bids_df[original_bids_df['id'] == bid_id]
+
+                                        if original_row_df_filtered.empty:
+                                            st.error(f"Erro: Lance original com ID {bid_id} não encontrado para comparação.")
+                                            continue
+                                        original_row_series = original_row_df_filtered.iloc[0]
 
                                         update_dict = {}
-                                        # editable_bid_cols must only contain column names also present in df_bids_for_display
-                                        editable_bid_cols = [
-                                            col for col in df_bids_for_display.columns
-                                            if col not in ['item_name', 'bidder_name'] # Non-editable display fields
-                                        ]
-
                                         for col in editable_bid_cols:
-                                            if col not in original_row_series.index or col not in edited_row_series.index:
-                                                st.warning(f"Coluna {col} não encontrada consistentemente para lance {bid_id}. Pulando.")
+                                            if col not in edited_row_series.index: # Should not happen if editable_bid_cols is correct
+                                                st.warning(f"Coluna editável '{col}' não encontrada na linha editada do lance ID {bid_id}.")
+                                                continue
+                                            if col not in original_row_series.index: # Should not happen
+                                                st.warning(f"Coluna editável '{col}' não encontrada na linha original do lance ID {bid_id}.")
                                                 continue
 
                                             original_value = original_row_series[col]
@@ -657,12 +665,12 @@ def show_main_view():
                     graph_cols_display = st.columns(2)
                     with graph_cols_display[0]:
                         if (
-                            not edited_quotes_df_indexed.empty  # Use edited_quotes_df_indexed
-                            and "calculated_price" in edited_quotes_df_indexed.columns
-                            and "supplier_name" in edited_quotes_df_indexed.columns
+                            not edited_quotes_df.empty  # Use standardized edited_quotes_df
+                            and "calculated_price" in edited_quotes_df.columns
+                            and "supplier_name" in edited_quotes_df.columns
                         ):
                             st.plotly_chart(
-                                create_quotes_figure(edited_quotes_df_indexed.reset_index()), # Use edited_quotes_df_indexed, may need reset_index if id is index
+                                create_quotes_figure(edited_quotes_df), # Use standardized edited_quotes_df
                                 use_container_width=True,
                             )
                         else:
@@ -677,9 +685,9 @@ def show_main_view():
                             and "created_at" in original_bids_df.columns # Ensure created_at is checked on original_bids_df
                         ):
                             min_quote_price_val = ( 
-                                edited_quotes_df_indexed["calculated_price"].min()
-                                if not edited_quotes_df_indexed.empty # This refers to quotes, and is fine
-                                and "calculated_price" in edited_quotes_df_indexed.columns
+                                edited_quotes_df["calculated_price"].min() # Use standardized edited_quotes_df
+                                if not edited_quotes_df.empty
+                                and "calculated_price" in edited_quotes_df.columns
                                 else None
                             )
                             st.plotly_chart(
