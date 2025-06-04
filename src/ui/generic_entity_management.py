@@ -1,22 +1,13 @@
 import streamlit as st
 import pandas as pd
 from decimal import Decimal
-from ui.utils import get_options_map # Added for foreign key selection
+from ui.utils import get_options_map
 
 # Helper function to load and prepare data for tabs (can be used as a default)
 def load_and_prepare_data(repository, entity_name: str, columns_to_display: list[str] = None, selected_foreign_keys: dict = None):
     """
     Loads data from the given repository, prepares it, and handles errors.
     Can also filter by selected foreign keys if provided.
-
-    Args:
-        repository: The repository instance to fetch data from.
-        entity_name (str): The name of the entity being loaded.
-        columns_to_display (list[str], optional): Specific columns to select.
-        selected_foreign_keys (dict, optional): A dictionary where keys are column names
-                                                to filter by and values are the selected IDs.
-    Returns:
-        pd.DataFrame or None: Processed DataFrame if successful, else None.
     """
     try:
         data_list = repository.get_all()
@@ -37,17 +28,15 @@ def load_and_prepare_data(repository, entity_name: str, columns_to_display: list
     if df.empty:
         return df
 
-    # Apply filters based on selected foreign keys
     if selected_foreign_keys:
         for fk_column, fk_id in selected_foreign_keys.items():
             if fk_id is not None and fk_column in df.columns:
                 df = df[df[fk_column] == fk_id]
-            elif fk_id is None and fk_column in df.columns: # If a selection is cleared, show no data for this entity
+            elif fk_id is None and fk_column in df.columns:
                 return pd.DataFrame()
-        if df.empty: # If filtering results in an empty DF
+        if df.empty:
             st.info(f"Nenhum(a) {entity_name.lower()} encontrado(a) para a seleção atual.")
 
-    # Basic DataFrame preparation (after filtering)
     if "created_at" in df.columns:
         df["created_at"] = pd.to_datetime(df["created_at"], errors='coerce').dt.tz_localize(None)
     if "updated_at" in df.columns:
@@ -59,62 +48,45 @@ def load_and_prepare_data(repository, entity_name: str, columns_to_display: list
             if col not in df.columns:
                 df[col] = None
             final_cols.append(col)
-        # Ensure 'id' is always included for editing, even if not in columns_to_display
         if 'id' not in final_cols and 'id' in df.columns:
             final_cols.append('id')
-        elif 'id' not in df.columns: # If original df has no id column (should not happen for editable entities)
+        elif 'id' not in df.columns:
             st.error(f"DataFrame para {entity_name} não possui coluna 'id', edições não serão possíveis.")
             return df[final_cols].copy() if final_cols else pd.DataFrame()
-
         return df[final_cols].copy()
 
     return df.copy()
 
-
-# Helper function for search box and filtering (remains largely the same)
 def display_search_box_and_filter_df(df_unfiltered: pd.DataFrame, search_columns: list[str], search_key_suffix: str, entity_name_plural: str, search_label: str = None):
     if df_unfiltered is None or df_unfiltered.empty:
         return df_unfiltered
-
     if search_label is None:
         search_label = f"Buscar em {entity_name_plural} (por {', '.join(search_columns)}):"
-
-    search_term = st.text_input(
-        search_label,
-        key=f"search_{search_key_suffix}"
-    )
-
+    search_term = st.text_input(search_label, key=f"search_{search_key_suffix}")
     if not search_term:
         return df_unfiltered
-
     search_term_lower = search_term.lower()
     valid_search_columns = [col for col in search_columns if col in df_unfiltered.columns]
     if not valid_search_columns:
         return df_unfiltered
-
     combined_filter = pd.Series([False] * len(df_unfiltered), index=df_unfiltered.index)
     for col in valid_search_columns:
         try:
             combined_filter |= df_unfiltered[col].astype(str).str.lower().str.contains(search_term_lower, na=False)
         except Exception:
             pass
-
     df_filtered = df_unfiltered[combined_filter]
     if df_filtered.empty and search_term:
         st.info(f"Nenhum resultado encontrado para sua busca em {entity_name_plural}.")
     return df_filtered
 
-# Helper function to display the data editor (remains largely the same)
-def display_data_editor(df_to_edit: pd.DataFrame, column_config: dict, editor_key_suffix: str):
+# Updated to accept is_editable
+def display_data_editor(df_to_edit: pd.DataFrame, column_config: dict, editor_key_suffix: str, is_editable: bool = True):
     if df_to_edit is None or df_to_edit.empty:
         return df_to_edit
-
-    # Ensure 'id' column is present before editing
     if 'id' not in df_to_edit.columns and not df_to_edit.empty:
          st.warning("A coluna 'id' é necessária para a edição mas não está presente no DataFrame fornecido ao editor.")
-         # Return df_to_edit as is, or an empty df, as editing wouldn't work correctly.
          return df_to_edit
-
 
     edited_df = st.data_editor(
         df_to_edit,
@@ -122,14 +94,14 @@ def display_data_editor(df_to_edit: pd.DataFrame, column_config: dict, editor_ke
         column_config=column_config,
         num_rows="dynamic",
         use_container_width=True,
-        hide_index=True
+        hide_index=True,
+        disabled=not is_editable # Set disabled state
     )
     return edited_df
 
-# Helper function to handle saving changes (remains largely the same)
 def handle_save_changes(
-    original_df: pd.DataFrame, # This should be the state of df_filtered BEFORE editing
-    edited_df: pd.DataFrame,   # This is the state of the df AFTER st.data_editor
+    original_df: pd.DataFrame,
+    edited_df: pd.DataFrame,
     repository,
     entity_name_singular: str,
     editable_columns: list[str],
@@ -141,63 +113,43 @@ def handle_save_changes(
     if required_fields is None: required_fields = []
     if decimal_fields is None: decimal_fields = []
     if special_conversions is None: special_conversions = {}
-
     default_non_updatable = ['id', 'created_at', 'updated_at']
     if fields_to_remove_before_update is None:
         fields_to_remove = default_non_updatable
     else:
         fields_to_remove = list(set(default_non_updatable + fields_to_remove_before_update))
-
     changes_processed_any_row = False
-
-    if original_df is None or edited_df is None : # Check if either is None
+    if original_df is None or edited_df is None :
         return False
-
-    # If both are empty DataFrames (e.g. initially no data), no changes to save.
     if original_df.empty and edited_df.empty:
         st.info(f"Nenhum dado para salvar em {entity_name_singular.lower()}s.")
         return False
-
-    # Ensure 'id' column exists in both DataFrames if they are not empty
     if not original_df.empty and 'id' not in original_df.columns:
         st.error(f"Coluna 'id' não encontrada no DataFrame original de {entity_name_singular}. Não é possível salvar alterações.")
         return False
     if not edited_df.empty and 'id' not in edited_df.columns:
         st.error(f"Coluna 'id' não encontrada no DataFrame editado de {entity_name_singular}. Não é possível salvar alterações.")
         return False
-
     original_df_cleaned = original_df.dropna(subset=['id']) if 'id' in original_df.columns else original_df
     edited_df_cleaned = edited_df.dropna(subset=['id']) if 'id' in edited_df.columns else edited_df
-
-    # If after cleaning, edited_df is empty and original wasn't, it means all rows were deleted by user.
-    # This function currently only handles updates and skips new rows. Deletions need separate logic.
     if not edited_df_cleaned.empty and original_df_cleaned.empty and not edited_df_cleaned.set_index('id').index.difference(original_df_cleaned.set_index('id').index).empty :
         st.info(f"Novas linhas foram adicionadas. Esta função salva apenas alterações em linhas existentes. Use a funcionalidade de criação para novos {entity_name_singular.lower()}s.")
-        # Fall through to see if any existing rows were modified, though likely not in this specific scenario.
-
     original_df_indexed = original_df_cleaned.set_index('id', drop=False) if not original_df_cleaned.empty else pd.DataFrame(columns=original_df.columns).set_index('id', drop=False)
     edited_df_indexed = edited_df_cleaned.set_index('id', drop=False) if not edited_df_cleaned.empty else pd.DataFrame(columns=edited_df.columns).set_index('id', drop=False)
-
-
     for entity_id, edited_row_series in edited_df_indexed.iterrows():
         if entity_id not in original_df_indexed.index:
-            # st.info(f"Nova linha com ID '{entity_id}' em {entity_name_singular} será ignorada. Use a funcionalidade de criação.")
-            continue # Skip new rows
-
+            continue
         original_row_series = original_df_indexed.loc[entity_id]
         current_row_update_dict = {}
         row_had_actual_changes = False
         skip_this_row_due_to_error = False
         temp_changed_values_dict = {}
-
         for col_name_from_editor in editable_columns:
             if col_name_from_editor not in edited_row_series.index or col_name_from_editor not in original_row_series.index:
                 continue
-
             original_value = original_row_series[col_name_from_editor]
             edited_value = edited_row_series[col_name_from_editor]
             changed = False
-
             if pd.isna(original_value) and pd.isna(edited_value): changed = False
             elif pd.isna(original_value) or pd.isna(edited_value): changed = True
             elif isinstance(original_value, pd.Timestamp) and isinstance(edited_value, pd.Timestamp):
@@ -226,16 +178,13 @@ def handle_save_changes(
                         changed = original_value != casted_edited_value
                     except (ValueError, TypeError): changed = True
                 else: changed = original_value != edited_value
-
             if changed:
                 temp_changed_values_dict[col_name_from_editor] = edited_value
                 row_had_actual_changes = True
-
         if not row_had_actual_changes: continue
         changes_processed_any_row = True
-
         for col_name_from_editor, raw_edited_value in temp_changed_values_dict.items():
-            target_field = col_name_from_editor # Default if no special conversion
+            target_field = col_name_from_editor
             try:
                 if col_name_from_editor in special_conversions:
                     conv_details = special_conversions[col_name_from_editor]
@@ -248,15 +197,9 @@ def handle_save_changes(
                 st.error(f"{entity_name_singular} ID {entity_id}: Erro ao converter '{col_name_from_editor}' ('{raw_edited_value}') para '{target_field}': {e}.")
                 skip_this_row_due_to_error = True; break
         if skip_this_row_due_to_error: continue
-
         for req_field_target_name in required_fields:
             value_to_check = current_row_update_dict.get(req_field_target_name)
-            # If not in current_row_update_dict, it means it wasn't changed.
-            # If it was required and originally valid, it should still be valid.
-            # This check primarily ensures that *edited* values meet requirements.
-            # If an already existing valid field is required and *not* in editable_columns, this won't catch it.
-            # This assumes required_fields are part of editable_columns or special_conversions targets.
-            if req_field_target_name in current_row_update_dict: # Only check if it was part of the change payload
+            if req_field_target_name in current_row_update_dict:
                 if value_to_check is None or (isinstance(value_to_check, str) and not value_to_check.strip()):
                     editor_col_for_error = req_field_target_name
                     for cn_editor, conv_details in special_conversions.items():
@@ -265,7 +208,6 @@ def handle_save_changes(
                     st.error(f"{entity_name_singular} ID {entity_id}: Campo obrigatório '{editor_col_for_error}' (destino: '{req_field_target_name}') está vazio. Alterações não salvas.")
                     skip_this_row_due_to_error = True; break
         if skip_this_row_due_to_error: continue
-
         for dec_field_target_name in decimal_fields:
             if dec_field_target_name in current_row_update_dict:
                 val = current_row_update_dict[dec_field_target_name]
@@ -281,35 +223,26 @@ def handle_save_changes(
                         st.error(f"{entity_name_singular} ID {entity_id}: Valor inválido para campo decimal '{editor_col_for_error}' ('{val}'): {e}.")
                         skip_this_row_due_to_error = True; break
         if skip_this_row_due_to_error: continue
-
         for field_to_rm in fields_to_remove:
             current_row_update_dict.pop(field_to_rm, None)
-
         if not current_row_update_dict: continue
-
         try:
             repository.update(entity_id, current_row_update_dict)
             st.success(f"{entity_name_singular} ID {entity_id} atualizado(a) com sucesso.")
         except Exception as e:
             st.error(f"Falha ao salvar {entity_name_singular} ID {entity_id}: {e}. Tentativa de payload: {current_row_update_dict}")
-
     if not changes_processed_any_row:
         is_identical = False
         if not original_df_indexed.empty and not edited_df_indexed.empty:
-            # Compare only common columns and common indices
             common_indices = original_df_indexed.index.intersection(edited_df_indexed.index)
             if not common_indices.empty:
                 common_columns = original_df_indexed.columns.intersection(edited_df_indexed.columns)
                 is_identical = original_df_indexed.loc[common_indices, common_columns].equals(edited_df_indexed.loc[common_indices, common_columns])
-        elif original_df_indexed.empty and edited_df_indexed.empty: # Both were empty from start
+        elif original_df_indexed.empty and edited_df_indexed.empty:
             is_identical = True
-
         if is_identical:
             st.info(f"Nenhuma alteração detectada para salvar em {entity_name_singular.lower()}s.")
-        # If not identical but no changes processed, it implies validation errors or other issues handled per row.
-
     return changes_processed_any_row
-
 
 def display_entity_management_ui(
     repository,
@@ -325,10 +258,10 @@ def display_entity_management_ui(
     fields_to_remove_before_update: list[str] = None,
     custom_search_label: str = None,
     editor_key_suffix: str = None,
-    # New parameters:
     foreign_key_selection_configs: list[dict] = None,
     custom_dataframe_preparation_func: callable = None,
-    custom_data_processing_hook: callable = None # General hook for any other df manipulation
+    custom_data_processing_hook: callable = None,
+    is_editable: bool = True # New parameter
 ):
     if required_fields is None: required_fields = []
     if decimal_fields is None: decimal_fields = []
@@ -346,59 +279,42 @@ def display_entity_management_ui(
         fk_repo = fk_config.get("repository_for_options")
         fk_options_map_config = fk_config.get("options_map_config", {})
         fk_key = f"select_{fk_config.get('filter_column_on_df', fk_repo.__class__.__name__)}_{key_suffix}"
-
         options_data_list = None
         try:
             options_data_list = fk_repo.get_all()
         except Exception as e:
             st.error(f"Erro ao carregar opções para {fk_label}: {e}")
             proceed_to_data_display = False; break
-
         options_map, option_ids = get_options_map(
-            data_list=options_data_list if options_data_list else [], # Ensure empty list if None
+            data_list=options_data_list if options_data_list else [],
             name_col=fk_options_map_config.get("name_col", "name"),
             extra_cols=fk_options_map_config.get("extra_cols"),
             default_message=fk_options_map_config.get("default_message", "Selecione...")
         )
-
-        selected_id = st.selectbox(
-            fk_label,
-            options=option_ids,
-            format_func=lambda x: options_map.get(x, "Selecione..."),
-            key=fk_key
-        )
-
+        selected_id = st.selectbox(fk_label, options=option_ids, format_func=lambda x: options_map.get(x, "Selecione..."), key=fk_key)
         filter_col_name = fk_config.get("filter_column_on_df")
         if filter_col_name:
             selected_foreign_key_ids[filter_col_name] = selected_id
-
         if selected_id is None and fk_config.get("block_if_parent_not_selected", True):
             st.info(f"Por favor, {fk_label.lower()} para continuar.")
-            proceed_to_data_display = False # Stop if this FK is required and not selected
-
-    df_display_unfiltered = pd.DataFrame() # Initialize as empty
-
+            proceed_to_data_display = False
+    df_display_unfiltered = pd.DataFrame()
     if proceed_to_data_display:
         if custom_dataframe_preparation_func:
             try:
-                # Pass main repository and any selected parent/foreign key IDs
                 df_display_unfiltered = custom_dataframe_preparation_func(repository, selected_foreign_key_ids)
-                if df_display_unfiltered is None: # Function might return None on error or specific condition
+                if df_display_unfiltered is None:
                     st.error(f"Falha ao preparar dados customizados para {entity_name_plural}.")
-                    df_display_unfiltered = pd.DataFrame() # Ensure it's an empty df
+                    df_display_unfiltered = pd.DataFrame()
             except Exception as e:
                 st.error(f"Erro na função de preparação de dados customizada para {entity_name_plural}: {e}")
                 df_display_unfiltered = pd.DataFrame()
         else:
-            # Default loading if no custom function, but pass selected FKs for filtering
             df_raw = load_and_prepare_data(repository, entity_name_plural, selected_foreign_keys=selected_foreign_key_ids)
             if df_raw is not None:
-                 df_display_unfiltered = df_raw # load_and_prepare_data now handles columns_to_display internally if passed
-            else: # df_raw is None or empty df
+                 df_display_unfiltered = df_raw
+            else:
                  df_display_unfiltered = pd.DataFrame() if df_raw is None else df_raw
-
-
-        # Apply general custom data processing hook if provided (after main load/prep)
         if custom_data_processing_hook and df_display_unfiltered is not None and not df_display_unfiltered.empty:
             try:
                 df_display_unfiltered = custom_data_processing_hook(df_display_unfiltered, selected_foreign_key_ids)
@@ -408,60 +324,45 @@ def display_entity_management_ui(
             except Exception as e:
                 st.error(f"Erro no hook de processamento de dados para {entity_name_plural}: {e}")
                 df_display_unfiltered = pd.DataFrame()
-
-        # Ensure specified columns to display exist, and 'id' for saving.
-        # This should ideally be handled by the prep functions or load_and_prepare_data.
-        # However, double check here.
         if not df_display_unfiltered.empty:
             actual_cols_to_display = columns_to_display[:]
             if 'id' not in actual_cols_to_display and 'id' in df_display_unfiltered.columns:
-                actual_cols_to_display.append('id') # Ensure 'id' is kept if it exists
-
+                actual_cols_to_display.append('id')
             missing_cols = [col for col in actual_cols_to_display if col not in df_display_unfiltered.columns]
             for col in missing_cols:
-                df_display_unfiltered[col] = None # Add missing columns
-
-            # Only select columns that are actually in the dataframe now + id if it was added
+                df_display_unfiltered[col] = None
             final_display_cols = [col for col in actual_cols_to_display if col in df_display_unfiltered.columns]
             df_display_unfiltered = df_display_unfiltered[final_display_cols].copy()
-
-
-    # Search and filter needs a non-None DataFrame
     df_filtered = display_search_box_and_filter_df(
         df_unfiltered=df_display_unfiltered if df_display_unfiltered is not None else pd.DataFrame(),
-        search_columns=search_columns,
-        search_key_suffix=key_suffix,
-        entity_name_plural=entity_name_plural,
-        search_label=custom_search_label
+        search_columns=search_columns, search_key_suffix=key_suffix,
+        entity_name_plural=entity_name_plural, search_label=custom_search_label
     )
-
-    # original_df_for_save should be a copy of df_filtered *before* it goes into the editor
-    # It should contain all columns, not just editable ones, to correctly compare.
-    # However, handle_save_changes compares based on editable_columns.
-    # The important part is that original_df_for_save reflects the data shown to the user just before editing.
     original_df_for_save = df_filtered.copy() if df_filtered is not None else pd.DataFrame()
 
+    # Pass is_editable to display_data_editor
     edited_df = display_data_editor(
         df_to_edit=df_filtered if df_filtered is not None else pd.DataFrame(),
         column_config=column_config,
-        editor_key_suffix=key_suffix
+        editor_key_suffix=key_suffix,
+        is_editable=is_editable # Pass down
     )
 
-    if st.button(f"Salvar Alterações em {entity_name_plural}", key=f"save_{key_suffix}"):
-        # Ensure edited_df is not None (can happen if df_filtered was None/empty)
-        if edited_df is not None and not edited_df.empty:
-            if handle_save_changes(
-                original_df=original_df_for_save,
-                edited_df=edited_df,
-                repository=repository,
-                entity_name_singular=entity_name_singular,
-                editable_columns=editable_columns,
-                required_fields=required_fields,
-                decimal_fields=decimal_fields,
-                special_conversions=special_conversions,
-                fields_to_remove_before_update=fields_to_remove_before_update
-            ):
-                st.rerun() # Rerun to reflect changes and re-trigger FK selections if any
-        elif original_df_for_save.empty and (edited_df is None or edited_df.empty):
-             st.info(f"Nenhum dado para salvar em {entity_name_plural}.")
-        # else: No changes or data was empty. handle_save_changes will provide more specific info.
+    # Conditionally show save button and handle changes
+    if is_editable:
+        if st.button(f"Salvar Alterações em {entity_name_plural}", key=f"save_{key_suffix}"):
+            if edited_df is not None and not edited_df.empty:
+                if handle_save_changes(
+                    original_df=original_df_for_save,
+                    edited_df=edited_df,
+                    repository=repository,
+                    entity_name_singular=entity_name_singular,
+                    editable_columns=editable_columns,
+                    required_fields=required_fields,
+                    decimal_fields=decimal_fields,
+                    special_conversions=special_conversions,
+                    fields_to_remove_before_update=fields_to_remove_before_update
+                ):
+                    st.rerun()
+            elif original_df_for_save.empty and (edited_df is None or edited_df.empty):
+                 st.info(f"Nenhum dado para salvar em {entity_name_plural}.")

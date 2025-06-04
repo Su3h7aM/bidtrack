@@ -6,7 +6,8 @@ from ui.generic_entity_management import display_entity_management_ui
 def display_bidders_tab(bidder_repo): # bidder_repo: BidderRepository
     """Displays the content for the Bidders management tab."""
 
-    bidder_cols_to_display = ["id", "name", "website", "email", "phone", "desc", "created_at", "updated_at"]
+    bidder_cols_to_display = ["name", "website", "email", "phone", "desc"]
+
     bidder_column_config = {
         "id": st.column_config.NumberColumn("ID", disabled=True, help="ID único do licitante."),
         "name": st.column_config.TextColumn("Nome", required=True, help="Nome do licitante."),
@@ -27,5 +28,6 @@ def display_bidders_tab(bidder_repo): # bidder_repo: BidderRepository
         custom_search_label="Buscar Licitantes (por nome, website, email, telefone, descrição):",
         editable_columns=["name", "website", "email", "phone", "desc"],
         required_fields=["name"],
-        editor_key_suffix="bidders"
+        editor_key_suffix="bidders",
+        is_editable=False # Set to read-only
     )

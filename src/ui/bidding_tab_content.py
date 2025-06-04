@@ -44,7 +44,10 @@ def prepare_biddings_dataframe_hook(df_raw: pd.DataFrame, selected_fks: dict = N
 def display_biddings_tab(bidding_repo): # bidding_repo: BiddingRepository
     """Displays the content for the Biddings management tab."""
 
-    bidding_cols_to_display = ["id", "process_number", "city", "mode_display", "date", "description", "status", "created_at", "updated_at"]
+    # Columns specifically for user display in st.data_editor
+    # IDs and timestamps are excluded here but handled by column_config for disabling
+    bidding_cols_to_display = ["process_number", "city", "mode_display", "date", "description", "status"]
+
     bidding_column_config = {
         "id": st.column_config.NumberColumn("ID", disabled=True, help="ID único da licitação."),
         "process_number": st.column_config.TextColumn("Nº do Processo", required=True, help="Número oficial do processo licitatório."),
@@ -79,5 +82,6 @@ def display_biddings_tab(bidding_repo): # bidding_repo: BiddingRepository
         },
         fields_to_remove_before_update=["mode_display"],
         custom_data_processing_hook=prepare_biddings_dataframe_hook,
-        editor_key_suffix="biddings"
+        editor_key_suffix="biddings",
+        is_editable=False # Set to read-only
     )

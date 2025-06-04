@@ -66,10 +66,9 @@ def display_bids_tab(bid_repo, bidding_repo, item_repo, bidder_repo):
     }
 
     # These columns are now expected to be delivered by get_bids_dataframe
-    bid_cols_to_display = [
-        "id", "item_name", "bidder_name", "price", "notes",
-        "item_id", "bidding_id", "bidder_id", "created_at", "updated_at"
-    ]
+    # User-facing display columns in the editor:
+    bid_cols_to_display = ["item_name", "bidder_name", "price", "notes"]
+
     bid_column_config = {
         "id": st.column_config.NumberColumn("ID Lance", disabled=True),
         "item_name": st.column_config.TextColumn("Item", disabled=True),
@@ -97,5 +96,6 @@ def display_bids_tab(bid_repo, bidding_repo, item_repo, bidder_repo):
         fields_to_remove_before_update=['item_name', 'bidder_name'],
         foreign_key_selection_configs=[fk_bidding_selection_config],
         custom_dataframe_preparation_func=lambda main_repo, fks_dict: prepare_bids_dataframe_via_service(main_repo, fks_dict, item_repo, bidder_repo),
-        editor_key_suffix="bids"
+        editor_key_suffix="bids",
+        is_editable=False # Set to read-only
     )

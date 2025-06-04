@@ -20,7 +20,9 @@ def display_items_tab(item_repo, bidding_repo): # item_repo: ItemRepository, bid
         "block_if_parent_not_selected": True # Don't show items table if no bidding is selected
     }
 
-    item_cols_to_display = ["id", "name", "description", "code", "quantity", "unit", "bidding_id", "created_at", "updated_at"]
+    # Columns specifically for user display in st.data_editor
+    item_cols_to_display = ["name", "description", "code", "quantity", "unit"]
+
     item_column_config = {
         "id": st.column_config.NumberColumn("ID", disabled=True, help="ID único do item."),
         "name": st.column_config.TextColumn("Nome do Item", required=True, help="Nome descritivo do item."),
@@ -47,5 +49,6 @@ def display_items_tab(item_repo, bidding_repo): # item_repo: ItemRepository, bid
         # No fields_to_remove_before_update needed specifically for bidding_id as it's not editable.
         foreign_key_selection_configs=[fk_bidding_selection_config],
         # Default load_and_prepare_data in generic_entity_management will handle filtering by selected bidding_id.
-        editor_key_suffix="items"
+        editor_key_suffix="items",
+        is_editable=False # Set to read-only
     )

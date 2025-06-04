@@ -6,7 +6,8 @@ from ui.generic_entity_management import display_entity_management_ui
 def display_suppliers_tab(supplier_repo): # Add type hint: supplier_repo: SupplierRepository
     """Displays the content for the Suppliers management tab."""
 
-    supplier_cols_to_display = ["id", "name", "website", "email", "phone", "desc", "created_at", "updated_at"]
+    supplier_cols_to_display = ["name", "website", "email", "phone", "desc"]
+
     supplier_column_config = {
         "id": st.column_config.NumberColumn("ID", disabled=True, help="ID único do fornecedor no sistema."),
         "name": st.column_config.TextColumn("Nome", required=True, help="Nome do fornecedor."),
@@ -27,5 +28,6 @@ def display_suppliers_tab(supplier_repo): # Add type hint: supplier_repo: Suppli
         custom_search_label="Buscar Fornecedores (por nome, website, email, telefone, descrição):",
         editable_columns=["name", "website", "email", "phone", "desc"],
         required_fields=["name"],
-        editor_key_suffix="suppliers"
+        editor_key_suffix="suppliers",
+        is_editable=False # Set to read-only
     )

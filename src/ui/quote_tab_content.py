@@ -81,11 +81,12 @@ def display_quotes_tab(quote_repo, bidding_repo, item_repo, supplier_repo):
     }
 
     # These columns are now expected to be delivered by get_quotes_dataframe
+    # User-facing display columns in the editor:
     quote_cols_to_display = [
-        "id", "item_name", "supplier_name", "price", "freight", "additional_costs",
-        "taxes", "margin", "calculated_price", "notes",
-        "item_id", "supplier_id", "created_at", "updated_at"
+        "item_name", "supplier_name", "price", "freight", "additional_costs",
+        "taxes", "margin", "calculated_price", "notes"
     ]
+
     quote_column_config = {
         "id": st.column_config.NumberColumn("ID Orçamento", disabled=True),
         "item_name": st.column_config.TextColumn("Item", disabled=True),
@@ -118,5 +119,6 @@ def display_quotes_tab(quote_repo, bidding_repo, item_repo, supplier_repo):
         fields_to_remove_before_update=['item_name', 'supplier_name', 'calculated_price'], # These are display-only
         foreign_key_selection_configs=[fk_bidding_selection_config],
         custom_dataframe_preparation_func=lambda main_repo, fks_dict: prepare_quotes_dataframe_via_service(main_repo, fks_dict, item_repo, supplier_repo),
-        editor_key_suffix="quotes"
+        editor_key_suffix="quotes",
+        is_editable=False # Set to read-only
     )
