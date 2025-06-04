@@ -453,6 +453,122 @@ def show_main_view():
                         items_list=all_items_list
                     )
 
+                    # --- Callback functions for data editor changes ---
+                    def save_quotes_changes():
+                        """Saves changes made to the quotes data editor."""
+                        changes_made = False
+                        editable_quote_cols = ['price', 'freight', 'additional_costs', 'taxes', 'margin', 'notes']
+                        edited_quotes_df_from_state = st.session_state.quotes_editor_main_view
+
+                        if not edited_quotes_df_from_state.empty:
+                            for editor_idx, edited_row_series in edited_quotes_df_from_state.iterrows():
+                                quote_id = edited_row_series['id']
+                                original_row_df_filtered = original_quotes_df[original_quotes_df['id'] == quote_id]
+
+                                if original_row_df_filtered.empty:
+                                    st.error(f"Erro: Orçamento original com ID {quote_id} não encontrado para comparação.")
+                                    continue
+                                original_row_series = original_row_df_filtered.iloc[0]
+
+                                update_dict = {}
+                                for col in editable_quote_cols:
+                                    if col not in edited_row_series.index:
+                                        st.warning(f"Coluna editável '{col}' não encontrada na linha editada do orçamento ID {quote_id}.")
+                                        continue
+                                    if col not in original_row_series.index:
+                                        st.warning(f"Coluna editável '{col}' não encontrada na linha original do orçamento ID {quote_id}.")
+                                        continue
+
+                                    original_value = original_row_series[col]
+                                    edited_value = edited_row_series[col]
+
+                                    if col in ["price", "freight", "additional_costs", "taxes", "margin"]:
+                                        try:
+                                            if edited_value is None or (isinstance(edited_value, str) and not edited_value.strip()):
+                                                edited_value_decimal = None
+                                            else:
+                                                edited_value_decimal = Decimal(str(edited_value))
+
+                                            if original_value is None and edited_value_decimal is None:
+                                                pass
+                                            elif original_value is None and edited_value_decimal == Decimal(0) and col in ["freight", "additional_costs", "taxes"]:
+                                                update_dict[col] = Decimal(0)
+                                            elif original_value != edited_value_decimal:
+                                                update_dict[col] = edited_value_decimal
+                                        except ValueError:
+                                            st.error(f"Valor inválido para {col} (decimal) no orçamento ID {quote_id}: '{edited_value}'.")
+                                            continue
+                                        except Exception as e:
+                                            st.error(f"Erro ao converter {col} no orçamento ID {quote_id}: {edited_value}. Erro: {e}")
+                                            continue
+                                    elif original_value != edited_value:
+                                        update_dict[col] = edited_value
+
+                                if update_dict:
+                                    try:
+                                        quote_repo.update(quote_id, update_dict)
+                                        st.success(f"Orçamento ID {quote_id} atualizado com sucesso.")
+                                        changes_made = True
+                                    except Exception as e:
+                                        st.error(f"Erro ao atualizar orçamento ID {quote_id}: {e}. Dados: {update_dict}")
+                        if changes_made:
+                            st.rerun()
+
+                    def save_bids_changes():
+                        """Saves changes made to the bids data editor."""
+                        changes_made = False
+                        editable_bid_cols = ['price', 'notes']
+                        edited_bids_df_from_state = st.session_state.bids_editor_main_view
+
+                        if not edited_bids_df_from_state.empty:
+                            for editor_idx, edited_row_series in edited_bids_df_from_state.iterrows():
+                                bid_id = edited_row_series['id']
+                                original_row_df_filtered = original_bids_df[original_bids_df['id'] == bid_id]
+
+                                if original_row_df_filtered.empty:
+                                    st.error(f"Erro: Lance original com ID {bid_id} não encontrado para comparação.")
+                                    continue
+                                original_row_series = original_row_df_filtered.iloc[0]
+
+                                update_dict = {}
+                                for col in editable_bid_cols:
+                                    if col not in edited_row_series.index:
+                                        st.warning(f"Coluna editável '{col}' não encontrada na linha editada do lance ID {bid_id}.")
+                                        continue
+                                    if col not in original_row_series.index:
+                                        st.warning(f"Coluna editável '{col}' não encontrada na linha original do lance ID {bid_id}.")
+                                        continue
+
+                                    original_value = original_row_series[col]
+                                    edited_value = edited_row_series[col]
+
+                                    if col == "price":
+                                        try:
+                                            if edited_value is None or (isinstance(edited_value, str) and not str(edited_value).strip()):
+                                                st.error(f"Preço não pode ser vazio para o lance ID {bid_id}.")
+                                                continue
+                                            edited_value_decimal = Decimal(str(edited_value))
+                                            if original_value != edited_value_decimal:
+                                                update_dict[col] = edited_value_decimal
+                                        except ValueError:
+                                            st.error(f"Valor inválido para preço no lance ID {bid_id}: '{edited_value}'.")
+                                            continue
+                                        except Exception as e:
+                                            st.error(f"Erro ao converter preço no lance ID {bid_id}: {edited_value}. Erro: {e}")
+                                            continue
+                                    elif original_value != edited_value:
+                                        update_dict[col] = edited_value
+
+                                if update_dict:
+                                    try:
+                                        bid_repo.update(bid_id, update_dict)
+                                        st.success(f"Lance ID {bid_id} atualizado com sucesso.")
+                                        changes_made = True
+                                    except Exception as e:
+                                        st.error(f"Erro ao atualizar lance ID {bid_id}: {e}. Dados: {update_dict}")
+                        if changes_made:
+                            st.rerun()
+
                     table_cols_display = st.columns(2)
                     with table_cols_display[0]:
                         st.markdown("##### Orçamentos do Item")
@@ -490,72 +606,10 @@ def show_main_view():
                                 key="quotes_editor_main_view",
                                 use_container_width=True,
                                 hide_index=True,
-                                num_rows="dynamic"
+                                num_rows="dynamic",
+                                on_change=save_quotes_changes # Use the new callback
                             )
-
-                            if st.button("Salvar Alterações nos Orçamentos", key="save_quotes_main_view"):
-                                changes_made = False
-                                # 3. Update Save Logic for Quotes
-                                editable_quote_cols = ['price', 'freight', 'additional_costs', 'taxes', 'margin', 'notes']
-
-                                if not edited_quotes_df.empty:
-                                    for editor_idx, edited_row_series in edited_quotes_df.iterrows(): # editor_idx is range index
-                                        quote_id = edited_row_series['id'] # Get 'id' from the row data
-
-                                        # Find the original row from original_quotes_df (the DataFrame before editor)
-                                        original_row_df_filtered = original_quotes_df[original_quotes_df['id'] == quote_id]
-
-                                        if original_row_df_filtered.empty:
-                                            st.error(f"Erro: Orçamento original com ID {quote_id} não encontrado para comparação.")
-                                            continue
-                                        original_row_series = original_row_df_filtered.iloc[0]
-
-                                        update_dict = {}
-                                        for col in editable_quote_cols:
-                                            if col not in edited_row_series.index: # Should not happen if editable_quote_cols is correct
-                                                st.warning(f"Coluna editável '{col}' não encontrada na linha editada do orçamento ID {quote_id}.")
-                                                continue
-                                            if col not in original_row_series.index: # Should not happen
-                                                st.warning(f"Coluna editável '{col}' não encontrada na linha original do orçamento ID {quote_id}.")
-                                                continue
-
-                                            original_value = original_row_series[col]
-                                            edited_value = edited_row_series[col]
-
-                                            if col in ["price", "freight", "additional_costs", "taxes", "margin"]:
-                                                try:
-                                                    # Handle None or empty string for optional Decimal fields before conversion
-                                                    if edited_value is None or (isinstance(edited_value, str) and not edited_value.strip()):
-                                                        edited_value_decimal = None
-                                                    else:
-                                                        edited_value_decimal = Decimal(str(edited_value))
-
-                                                    # Special handling for optional fields where None is different from 0 for comparison
-                                                    if original_value is None and edited_value_decimal is None: # Both None, no change
-                                                        pass
-                                                    elif original_value is None and edited_value_decimal == Decimal(0) and col in ["freight", "additional_costs", "taxes"]:
-                                                        # If original was None, and new is 0 for an optional field, consider it a change to 0
-                                                        update_dict[col] = Decimal(0)
-                                                    elif original_value != edited_value_decimal:
-                                                        update_dict[col] = edited_value_decimal
-                                                except ValueError: # More specific error for Decimal conversion
-                                                    st.error(f"Valor inválido para {col} (decimal) no orçamento ID {quote_id}: '{edited_value}'.")
-                                                    continue
-                                                except Exception as e: # Catch any other conversion error
-                                                    st.error(f"Erro ao converter {col} no orçamento ID {quote_id}: {edited_value}. Erro: {e}")
-                                                    continue
-                                            elif original_value != edited_value:
-                                                update_dict[col] = edited_value
-
-                                        if update_dict:
-                                            try:
-                                                quote_repo.update(quote_id, update_dict)
-                                                st.success(f"Orçamento ID {quote_id} atualizado com sucesso.")
-                                                changes_made = True
-                                            except Exception as e:
-                                                st.error(f"Erro ao atualizar orçamento ID {quote_id}: {e}. Dados: {update_dict}")
-                                if changes_made:
-                                    st.rerun()
+                            # The save button is no longer needed here as on_change handles it.
                         else:
                             st.info("Nenhum orçamento cadastrado para este item.")
 
@@ -591,108 +645,52 @@ def show_main_view():
                                 key="bids_editor_main_view",
                                 use_container_width=True,
                                 hide_index=True,
-                                num_rows="dynamic"
+                                num_rows="dynamic",
+                                on_change=save_bids_changes # Use the new callback
                             )
-
-                            if st.button("Salvar Alterações nos Lances", key="save_bids_main_view"):
-                                changes_made = False
-                                # 3. Update Save Logic for Bids
-                                editable_bid_cols = ['price', 'notes']
-
-                                if not edited_bids_df.empty:
-                                    for editor_idx, edited_row_series in edited_bids_df.iterrows(): # editor_idx is range index
-                                        bid_id = edited_row_series['id'] # Get 'id' from the row data
-
-                                        # Find the original row from original_bids_df (the DataFrame before editor)
-                                        original_row_df_filtered = original_bids_df[original_bids_df['id'] == bid_id]
-
-                                        if original_row_df_filtered.empty:
-                                            st.error(f"Erro: Lance original com ID {bid_id} não encontrado para comparação.")
-                                            continue
-                                        original_row_series = original_row_df_filtered.iloc[0]
-
-                                        update_dict = {}
-                                        for col in editable_bid_cols:
-                                            if col not in edited_row_series.index: # Should not happen if editable_bid_cols is correct
-                                                st.warning(f"Coluna editável '{col}' não encontrada na linha editada do lance ID {bid_id}.")
-                                                continue
-                                            if col not in original_row_series.index: # Should not happen
-                                                st.warning(f"Coluna editável '{col}' não encontrada na linha original do lance ID {bid_id}.")
-                                                continue
-
-                                            original_value = original_row_series[col]
-                                            edited_value = edited_row_series[col]
-
-                                            if col == "price":
-                                                try:
-                                                    if edited_value is None or (isinstance(edited_value, str) and not str(edited_value).strip()):
-                                                        st.error(f"Preço não pode ser vazio para o lance ID {bid_id}.")
-                                                        # update_dict.clear() # Clear to prevent partial update for this row
-                                                        # break # Stop processing this row
-                                                        # To prevent saving this row if price is invalid, we can set a flag or skip adding to update_dict
-                                                        # For now, let's assume an error message is enough and other valid fields for this row might be saved if any.
-                                                        # A better approach would be to invalidate the entire row's update.
-                                                        # For simplicity in this step, we'll just show error and skip this field.
-                                                        # The `required=True` in NumberColumn should ideally prevent this,
-                                                        # but explicit check here is safer.
-                                                        continue # Skip this problematic field
-
-                                                    edited_value_decimal = Decimal(str(edited_value))
-                                                    if original_value != edited_value_decimal:
-                                                        update_dict[col] = edited_value_decimal
-                                                except ValueError:
-                                                    st.error(f"Valor inválido para preço no lance ID {bid_id}: '{edited_value}'.")
-                                                    continue
-                                                except Exception as e: # Catch any other conversion error
-                                                    st.error(f"Erro ao converter preço no lance ID {bid_id}: {edited_value}. Erro: {e}")
-                                                    continue
-                                            elif original_value != edited_value:
-                                                update_dict[col] = edited_value
-
-                                        if update_dict: # Only proceed if there are changes to save for this row
-                                            try:
-                                                bid_repo.update(bid_id, update_dict)
-                                                st.success(f"Lance ID {bid_id} atualizado com sucesso.")
-                                                changes_made = True
-                                            except Exception as e:
-                                                st.error(f"Erro ao atualizar lance ID {bid_id}: {e}. Dados: {update_dict}")
-                                if changes_made:
-                                    st.rerun()
+                            # The save button is no longer needed here as on_change handles it.
                         else:
                             st.info("Nenhum lance cadastrado para este item.")
 
                     st.subheader("Gráficos")
                     graph_cols_display = st.columns(2)
                     with graph_cols_display[0]:
+                        # Use st.session_state.quotes_editor_main_view for graph data if available, else original_quotes_df
+                        quotes_df_for_graph = st.session_state.get("quotes_editor_main_view", original_quotes_df)
                         if (
-                            not edited_quotes_df.empty  # Use standardized edited_quotes_df
-                            and "calculated_price" in edited_quotes_df.columns
-                            and "supplier_name" in edited_quotes_df.columns
+                            not quotes_df_for_graph.empty
+                            and "calculated_price" in quotes_df_for_graph.columns
+                            and "supplier_name" in quotes_df_for_graph.columns
                         ):
                             st.plotly_chart(
-                                create_quotes_figure(edited_quotes_df), # Use standardized edited_quotes_df
+                                create_quotes_figure(quotes_df_for_graph),
                                 use_container_width=True,
                             )
                         else:
                             st.caption("Gráfico de orçamentos não disponível.")
                     with graph_cols_display[1]:
-                        # Use original_bids_df for the chart data to ensure 'created_at' is present
-                        # and for the emptiness check related to plotting.
+                        # Use st.session_state.bids_editor_main_view for graph data if available, else original_bids_df
+                        bids_df_for_graph = st.session_state.get("bids_editor_main_view", original_bids_df)
                         if (
-                            not original_bids_df.empty # Changed to original_bids_df
-                            and "price" in original_bids_df.columns
-                            and "bidder_name" in original_bids_df.columns
-                            and "created_at" in original_bids_df.columns # Ensure created_at is checked on original_bids_df
+                            not bids_df_for_graph.empty
+                            and "price" in bids_df_for_graph.columns
+                            and "bidder_name" in bids_df_for_graph.columns
+                            # 'created_at' is on original_bids_df, if bids_df_for_graph is from session_state it might not have it
+                            # For consistency and if 'created_at' is essential for the bid figure, consider always using original_bids_df
+                            # or ensuring 'created_at' is preserved/added to the session state version.
+                            # For now, we'll assume 'created_at' is primarily for sorting/display which original_bids_df handles.
+                            # If create_bids_figure strictly needs 'created_at' from its input df, this logic might need adjustment.
+                            # Let's use original_bids_df for create_bids_figure to ensure 'created_at' is present.
                         ):
-                            min_quote_price_val = ( 
-                                edited_quotes_df["calculated_price"].min() # Use standardized edited_quotes_df
-                                if not edited_quotes_df.empty
-                                and "calculated_price" in edited_quotes_df.columns
+                            min_quote_price_val = (
+                                quotes_df_for_graph["calculated_price"].min()
+                                if not quotes_df_for_graph.empty
+                                and "calculated_price" in quotes_df_for_graph.columns
                                 else None
                             )
                             st.plotly_chart(
                                 create_bids_figure(
-                                    original_bids_df, min_quote_price_val # Changed to original_bids_df
+                                    original_bids_df, min_quote_price_val # Using original_bids_df to ensure 'created_at'
                                 ),
                                 use_container_width=True,
                             )
