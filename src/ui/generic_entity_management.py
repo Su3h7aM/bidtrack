@@ -113,78 +113,138 @@ def handle_save_changes(
     if required_fields is None: required_fields = []
     if decimal_fields is None: decimal_fields = []
     if special_conversions is None: special_conversions = {}
-    default_non_updatable = ['id', 'created_at', 'updated_at']
+    default_non_updatable = ['id', 'created_at', 'updated_at'] # These should not be in editable_columns
     if fields_to_remove_before_update is None:
         fields_to_remove = default_non_updatable
     else:
         fields_to_remove = list(set(default_non_updatable + fields_to_remove_before_update))
+
     changes_processed_any_row = False
-    if original_df is None or edited_df is None :
+
+    if original_df is None: # original_df is expected to be indexed by 'id'
+        st.error(f"DataFrame original de {entity_name_singular} não fornecido. Impossível salvar.")
         return False
+    if edited_df is None:
+        st.info(f"Nenhum dado editado para {entity_name_singular.lower()}s.")
+        return False
+
     if original_df.empty and edited_df.empty:
         st.info(f"Nenhum dado para salvar em {entity_name_singular.lower()}s.")
         return False
-    if not original_df.empty and 'id' not in original_df.columns:
-        st.error(f"Coluna 'id' não encontrada no DataFrame original de {entity_name_singular}. Não é possível salvar alterações.")
-        return False
-    if not edited_df.empty and 'id' not in edited_df.columns:
-        st.error(f"Coluna 'id' não encontrada no DataFrame editado de {entity_name_singular}. Não é possível salvar alterações.")
-        return False
-    original_df_cleaned = original_df.dropna(subset=['id']) if 'id' in original_df.columns else original_df
-    edited_df_cleaned = edited_df.dropna(subset=['id']) if 'id' in edited_df.columns else edited_df
-    if not edited_df_cleaned.empty and original_df_cleaned.empty and not edited_df_cleaned.set_index('id').index.difference(original_df_cleaned.set_index('id').index).empty :
-        st.info(f"Novas linhas foram adicionadas. Esta função salva apenas alterações em linhas existentes. Use a funcionalidade de criação para novos {entity_name_singular.lower()}s.")
-    original_df_indexed = original_df_cleaned.set_index('id', drop=False) if not original_df_cleaned.empty else pd.DataFrame(columns=original_df.columns).set_index('id', drop=False)
-    edited_df_indexed = edited_df_cleaned.set_index('id', drop=False) if not edited_df_cleaned.empty else pd.DataFrame(columns=edited_df.columns).set_index('id', drop=False)
-    for entity_id, edited_row_series in edited_df_indexed.iterrows():
-        if entity_id not in original_df_indexed.index:
+
+    # Assumption: original_df is already indexed by 'id' and contains all columns.
+    # edited_df has a range index and contains only columns shown in the editor.
+    # editable_columns should only contain columns that were actually in edited_df.
+
+    if not original_df.index.name == 'id' and not original_df.empty :
+        # This check is important. display_entity_management_ui must ensure original_df_for_save is indexed.
+        st.error(f"DataFrame original de {entity_name_singular} não está indexado por 'id'. Falha interna.")
+        # Attempt to index it now if 'id' column exists, otherwise fail.
+        if 'id' in original_df.columns:
+            original_df = original_df.set_index('id', drop=False)
+            st.warning("Tentativa de reindexar DataFrame original bem-sucedida, mas isso deve ser feito pelo chamador.")
+        else:
+            st.error("DataFrame original não tem coluna 'id' para indexação. Impossível salvar.")
+            return False
+
+    # No new entities can be added via this save mechanism if they are not in original_df
+    if not edited_df.empty and original_df.empty:
+         new_rows_count = len(edited_df)
+         if new_rows_count > 0:
+            st.info(f"{new_rows_count} nova(s) linha(s) detectada(s) no editor. Esta função salva apenas alterações em linhas existentes. Use a funcionalidade de criação para novos {entity_name_singular.lower()}s.")
+            # We might still process existing rows if any were somehow present in original_df and also in edited_df
+            # but the current logic implies edited_df would be a subset of original_df rows.
+
+    # Iterate through the edited_df (which has a range index)
+    for edited_idx, edited_row_series in edited_df.iterrows():
+        if edited_idx >= len(original_df.index):
+            # This case implies more rows in edited_df than original_df, which means new rows.
+            # These should be handled by an "add" mechanism, not "update".
+            # For robustness, skip if editor somehow produces more rows than original.
+            st.warning(f"Linha {edited_idx} no editor não corresponde a uma linha original. Pulando.")
             continue
-        original_row_series = original_df_indexed.loc[entity_id]
+
+        entity_id = original_df.index[edited_idx]
+
+        # Check if this entity_id from original_df is valid (it should be, as it's from original_df's index)
+        # No, this check is not needed: if entity_id is from original_df.index, it must be in original_df.index.
+        # if entity_id not in original_df.index:
+        #     st.warning(f"ID de entidade {entity_id} (da linha {edited_idx} do editor) não encontrado no DataFrame original. Pulando.")
+        #     continue
+
+        original_row_series = original_df.loc[entity_id]
         current_row_update_dict = {}
         row_had_actual_changes = False
         skip_this_row_due_to_error = False
         temp_changed_values_dict = {}
         for col_name_from_editor in editable_columns:
-            if col_name_from_editor not in edited_row_series.index or col_name_from_editor not in original_row_series.index:
+            # editable_columns should only contain columns that are in edited_row_series
+            # and also intended to be editable (and thus should be in original_row_series too,
+            # unless it's a new column concept not directly in the model but derived for editing).
+            # For simplicity, assume editable_columns refers to fields in the model that are also in edited_row_series.
+            if col_name_from_editor not in edited_row_series.index :
+                # This column is in the editable_columns list but not in the edited DataFrame.
+                # This might happen if editable_columns is not perfectly synced with df_for_editor_display.
+                # The `actual_editable_columns_for_save` in `display_entity_management_ui` should prevent this.
+                st.warning(f"Coluna '{col_name_from_editor}' definida como editável mas não encontrada nos dados editados para {entity_name_singular} ID {entity_id}. Pulando esta coluna.")
                 continue
-            original_value = original_row_series[col_name_from_editor]
+
+            # If col_name_from_editor is not in original_row_series, it implies it's a new, perhaps virtual, field.
+            # The comparison logic needs to handle this. If it's truly new and not in the model,
+            # it might only be used for special_conversions to target_fields that ARE in the model.
+            original_value = original_row_series.get(col_name_from_editor) # Use .get() for safety
             edited_value = edited_row_series[col_name_from_editor]
+
             changed = False
-            if pd.isna(original_value) and pd.isna(edited_value): changed = False
-            elif pd.isna(original_value) or pd.isna(edited_value): changed = True
+            if original_value is None and pd.isna(edited_value): # original was None, editor set to NA (empty cell perhaps)
+                 changed = False # Or True if None should be preserved explicitly. Depends on desired behavior for nulls.
+            elif original_value is not None and pd.isna(edited_value): # original had value, editor cleared it
+                 changed = True
+            elif pd.isna(original_value) and not pd.isna(edited_value): # original was NA, editor provided value
+                 changed = True
+            elif pd.isna(original_value) and pd.isna(edited_value): # Both NA (e.g. np.nan, None, pd.NaT)
+                 changed = False
             elif isinstance(original_value, pd.Timestamp) and isinstance(edited_value, pd.Timestamp):
+                # Ensure Naive comparison if one is aware and other is naive
                 ts_original = original_value.tz_localize(None) if original_value.tzinfo else original_value
                 ts_edited = edited_value.tz_localize(None) if edited_value.tzinfo else edited_value
                 changed = ts_original != ts_edited
-            elif isinstance(original_value, pd.Timestamp) or isinstance(edited_value, pd.Timestamp): changed = True
+            elif isinstance(original_value, pd.Timestamp) or isinstance(edited_value, pd.Timestamp): # Type mismatch involving Timestamp
+                changed = True
             elif isinstance(original_value, Decimal):
                 try:
                     str_edited_value = str(edited_value).strip()
-                    if not str_edited_value and original_value is not None : changed = True
-                    elif not str_edited_value and original_value is None: changed = False
+                    if not str_edited_value and original_value is not None : changed = True # Cleared value
+                    elif not str_edited_value and original_value is None: changed = False # Was None, remains effectively None
                     else: changed = original_value != Decimal(str_edited_value)
-                except: changed = True
-            elif isinstance(edited_value, Decimal) and not isinstance(original_value, Decimal):
+                except: changed = True # Conversion error implies change
+            elif isinstance(edited_value, Decimal) and not isinstance(original_value, Decimal): # Original was not Decimal but edited is
                  try:
                     str_original_value = str(original_value).strip()
                     if not str_original_value and edited_value is not None: changed = True
                     elif not str_original_value and edited_value is None: changed = False
                     else: changed = Decimal(str_original_value) != edited_value
                  except: changed = True
-            else:
+            else: # General case
+                # Try to compare types if possible, then values
                 if type(original_value) != type(edited_value) and not (pd.isna(original_value) and pd.isna(edited_value)):
                     try:
+                        # Attempt to cast edited_value to original_value's type for comparison
+                        # This might not always be appropriate or possible
                         casted_edited_value = type(original_value)(edited_value)
                         changed = original_value != casted_edited_value
-                    except (ValueError, TypeError): changed = True
-                else: changed = original_value != edited_value
+                    except (ValueError, TypeError):
+                        changed = True # If casting fails, consider it a change
+                else:
+                    changed = original_value != edited_value
+
             if changed:
                 temp_changed_values_dict[col_name_from_editor] = edited_value
                 row_had_actual_changes = True
         if not row_had_actual_changes: continue
         changes_processed_any_row = True
         for col_name_from_editor, raw_edited_value in temp_changed_values_dict.items():
-            target_field = col_name_from_editor
+            target_field = col_name_from_editor # Default target is the same as editor column name
             try:
                 if col_name_from_editor in special_conversions:
                     conv_details = special_conversions[col_name_from_editor]
@@ -192,56 +252,73 @@ def handle_save_changes(
                     conversion_func = conv_details["conversion_func"]
                     current_row_update_dict[target_field] = conversion_func(raw_edited_value)
                 else:
+                    # If no special conversion, ensure the target_field (which is col_name_from_editor)
+                    # is a valid field for the model (this check is implicitly done by SQLModel/Pydantic on update).
                     current_row_update_dict[target_field] = raw_edited_value
             except Exception as e:
                 st.error(f"{entity_name_singular} ID {entity_id}: Erro ao converter '{col_name_from_editor}' ('{raw_edited_value}') para '{target_field}': {e}.")
                 skip_this_row_due_to_error = True; break
         if skip_this_row_due_to_error: continue
+
+        # Required field validation: based on target_field names
         for req_field_target_name in required_fields:
-            value_to_check = current_row_update_dict.get(req_field_target_name)
-            if req_field_target_name in current_row_update_dict:
-                if value_to_check is None or (isinstance(value_to_check, str) and not value_to_check.strip()):
+            final_value_to_check = current_row_update_dict.get(req_field_target_name)
+
+            # If the required field wasn't in temp_changed_values_dict (i.e., not edited),
+            # its value would be the original one. But validation should be on the *new* state.
+            # So, if it's not in current_row_update_dict, it means it wasn't changed OR it wasn't an editable column.
+            # If it wasn't changed, its original value must have been valid.
+            # If it IS in current_row_update_dict, we check its new value.
+            if req_field_target_name in current_row_update_dict: # Check if it was part of the update
+                 if final_value_to_check is None or (isinstance(final_value_to_check, str) and not final_value_to_check.strip()):
+                    # Find the original editor column name for error message if special_conversion was used
                     editor_col_for_error = req_field_target_name
                     for cn_editor, conv_details in special_conversions.items():
                         if conv_details.get("target_field") == req_field_target_name:
                             editor_col_for_error = cn_editor; break
-                    st.error(f"{entity_name_singular} ID {entity_id}: Campo obrigatório '{editor_col_for_error}' (destino: '{req_field_target_name}') está vazio. Alterações não salvas.")
+                    st.error(f"{entity_name_singular} ID {entity_id}: Campo obrigatório '{editor_col_for_error}' (destino: '{req_field_target_name}') está vazio ou inválido. Alterações não salvas para esta linha.")
                     skip_this_row_due_to_error = True; break
+            # If a required_field is NOT in current_row_update_dict, it means it was not edited.
+            # We assume its original value (from original_row_series) was valid.
+            # If a required_field was NOT part of editable_columns, it could not have been changed.
+            # This logic assumes required_fields are typically among editable_columns if they are to be enforced on edit.
+
         if skip_this_row_due_to_error: continue
+
+        # Decimal field validation: based on target_field names
         for dec_field_target_name in decimal_fields:
             if dec_field_target_name in current_row_update_dict:
                 val = current_row_update_dict[dec_field_target_name]
                 if val is not None and not isinstance(val, Decimal):
                     try:
                         str_val = str(val).strip()
-                        if not str_val: current_row_update_dict[dec_field_target_name] = None
+                        if not str_val: current_row_update_dict[dec_field_target_name] = None # Allow clearing optional decimal
                         else: current_row_update_dict[dec_field_target_name] = Decimal(str_val)
                     except Exception as e:
                         editor_col_for_error = dec_field_target_name
                         for cn_editor, conv_details in special_conversions.items():
                            if conv_details.get("target_field") == dec_field_target_name: editor_col_for_error = cn_editor; break
-                        st.error(f"{entity_name_singular} ID {entity_id}: Valor inválido para campo decimal '{editor_col_for_error}' ('{val}'): {e}.")
+                        st.error(f"{entity_name_singular} ID {entity_id}: Valor inválido para campo decimal '{editor_col_for_error}' ('{val}'): {e}. Alterações não salvas para esta linha.")
                         skip_this_row_due_to_error = True; break
         if skip_this_row_due_to_error: continue
-        for field_to_rm in fields_to_remove:
+
+        # Remove fields that should not go into the update payload (e.g., 'id', 'created_at', derived display fields)
+        for field_to_rm in fields_to_remove: # fields_to_remove refers to target model field names
             current_row_update_dict.pop(field_to_rm, None)
-        if not current_row_update_dict: continue
+
+        if not current_row_update_dict: # No actual changes to update after conversions and removals
+            st.info(f"Nenhuma alteração real para {entity_name_singular} ID {entity_id} após processamento.")
+            continue
+
         try:
             repository.update(entity_id, current_row_update_dict)
-            st.success(f"{entity_name_singular} ID {entity_id} atualizado(a) com sucesso.")
+            st.success(f"{entity_name_singular} ID {entity_id} atualizado(a) com sucesso com: {current_row_update_dict}")
         except Exception as e:
             st.error(f"Falha ao salvar {entity_name_singular} ID {entity_id}: {e}. Tentativa de payload: {current_row_update_dict}")
+
     if not changes_processed_any_row:
-        is_identical = False
-        if not original_df_indexed.empty and not edited_df_indexed.empty:
-            common_indices = original_df_indexed.index.intersection(edited_df_indexed.index)
-            if not common_indices.empty:
-                common_columns = original_df_indexed.columns.intersection(edited_df_indexed.columns)
-                is_identical = original_df_indexed.loc[common_indices, common_columns].equals(edited_df_indexed.loc[common_indices, common_columns])
-        elif original_df_indexed.empty and edited_df_indexed.empty:
-            is_identical = True
-        if is_identical:
-            st.info(f"Nenhuma alteração detectada para salvar em {entity_name_singular.lower()}s.")
+        # This simple check replaces the more complex DataFrame comparison
+        st.info(f"Nenhuma alteração detectada para salvar em {entity_name_singular.lower()}s.")
     return changes_processed_any_row
 
 def display_entity_management_ui(
@@ -339,86 +416,137 @@ def display_entity_management_ui(
         search_columns=search_columns, search_key_suffix=key_suffix,
         entity_name_plural=entity_name_plural, search_label=custom_search_label
     )
-    original_df_for_save = df_filtered.copy() if df_filtered is not None else pd.DataFrame()
 
-    # df_filtered is the state of data after loading, (optional) custom processing, and search filtering.
-    # This is the data that should be displayed in the editor.
-    df_to_pass_to_editor = df_filtered if df_filtered is not None else pd.DataFrame()
+    # Prepare original_df_for_save: ensure it's indexed by 'id'
+    # This is the DataFrame that handle_save_changes will use as the source of truth for original values.
+    # It must contain all original columns, including 'id', and be indexed by 'id'.
+    original_df_for_save = pd.DataFrame()
+    if df_filtered is not None and not df_filtered.empty:
+        temp_original_df = df_filtered.copy()
+        if 'id' in temp_original_df.columns:
+            original_df_for_save = temp_original_df.set_index('id', drop=False)
+        else:
+            st.error(f"Erro crítico: DataFrame para {entity_name_plural} não possui coluna 'id' após o carregamento e filtragem. Edições não podem ser salvas.")
+            # Fallback to an empty DataFrame with 'id' index if possible, or just empty.
+            original_df_for_save = pd.DataFrame(columns=temp_original_df.columns).set_index('id', drop=False) if 'id' in temp_original_df.columns else pd.DataFrame()
+    elif df_filtered is not None: # It's an empty DataFrame
+        original_df_for_save = pd.DataFrame(columns=df_filtered.columns)
+        if 'id' in original_df_for_save.columns:
+            original_df_for_save = original_df_for_save.set_index('id', drop=False)
+        # else: it remains an empty DataFrame, possibly without 'id' if df_filtered was truly empty and schema-less
+
+    # This df_filtered contains all columns, including 'id'.
+    # original_df_for_save is a copy of this, used by handle_save_changes.
+
+    # Part 1: Modify display_entity_management_ui
+    # 1. Identify the DataFrame to be displayed (df_full_data = df_filtered)
+    df_full_data = df_filtered if df_filtered is not None else pd.DataFrame()
+
+    # 2. Create df_for_editor_display
+    # Use the columns_to_display list (passed from *_tab_content.py files)
+    # Ensure columns_to_display actually exist in df_full_data
+    actual_columns_for_editor_display = []
+    if not df_full_data.empty:
+        actual_columns_for_editor_display = [col for col in columns_to_display if col in df_full_data.columns]
+
+    df_for_editor_display = pd.DataFrame()
+    if not df_full_data.empty and actual_columns_for_editor_display:
+        df_for_editor_display = df_full_data[actual_columns_for_editor_display].copy()
+    elif not df_full_data.empty and not columns_to_display: # If columns_to_display is empty, show all from df_full_data
+        # This case might be undesirable if 'id' and other meta columns are in df_full_data.
+        # However, *_tab_content.py files are supposed to provide columns_to_display.
+        # For safety, if columns_to_display is empty, we'll pass an empty DF to the editor or only non-id/meta columns.
+        # For now, adhering to "uses the columns_to_display list": if it's empty, df_for_editor_display remains empty.
+        pass # df_for_editor_display remains empty if actual_columns_for_editor_display is empty
+
+    # 3. Filter column_config
+    column_config_for_editor = {k: v for k, v in column_config.items() if k in actual_columns_for_editor_display}
+
+    # df_to_pass_to_editor is now df_for_editor_display
+    df_to_pass_to_editor = df_for_editor_display # Renaming for clarity below is not needed, just use df_for_editor_display
 
     session_key_orig_df = f'{editor_key_suffix}_orig_df_for_autosave'
 
     if is_editable and auto_save:
         # Initialize session state for original DataFrame if not present or if data might have reloaded
-        # A more robust reload detection might be needed if df_to_pass_to_editor can change identity
+        # A more robust reload detection might be needed if df_for_editor_display can change identity
         # without other widget interactions causing a rerun.
-        if session_key_orig_df not in st.session_state or not st.session_state[session_key_orig_df].shape == df_to_pass_to_editor.shape:
+        if session_key_orig_df not in st.session_state or not st.session_state[session_key_orig_df].shape == df_for_editor_display.shape:
              # Basic check, might need refinement if df structure changes but data is same
-            st.session_state[session_key_orig_df] = df_to_pass_to_editor.copy()
+            st.session_state[session_key_orig_df] = df_for_editor_display.copy() # Store the displayed part for auto-save comparison
 
-        # Ensure that df_to_pass_to_editor for the editor is actually the version from session state
+        # Ensure that df_for_editor_display for the editor is actually the version from session state
         # if we expect it to be persistent across reruns before this point.
-        # However, df_to_pass_to_editor is derived from upstream, so it *is* the current "original" for this render.
+        # However, df_for_editor_display is derived from upstream, so it *is* the current "original" for this render.
         # The session state one is the "previous original" to compare against for auto-save.
 
-    edited_df = display_data_editor(
-        df_to_edit=df_to_pass_to_editor, # Use the consistently prepared DataFrame
-        column_config=column_config,
-        editor_key_suffix=editor_key_suffix, # Use the specific editor_key_suffix
+    # 4. Update display_data_editor call
+    # display_data_editor already uses hide_index=True internally.
+    edited_df_display_output = display_data_editor(
+        df_to_edit=df_for_editor_display, # Pass the sliced DataFrame
+        column_config=column_config_for_editor, # Pass the filtered column_config
+        editor_key_suffix=editor_key_suffix,
         is_editable=is_editable
     )
 
     if is_editable:
         if auto_save:
-            previous_df_state = st.session_state.get(session_key_orig_df)
-            # Make sure previous_df_state is not None and has 'id' if not empty, similar for edited_df
-            can_compare = True
-            if previous_df_state is None:
-                can_compare = False
-            if not previous_df_state.empty and 'id' not in previous_df_state.columns:
-                 # This should not happen if load_and_prepare_data works correctly
-                # st.warning(f"Auto-save: Previous state for {entity_name_plural} is missing 'id' column.")
-                can_compare = False
-            if not edited_df.empty and 'id' not in edited_df.columns:
-                # This should not happen if display_data_editor's input had 'id'
-                # st.warning(f"Auto-save: Edited data for {entity_name_plural} is missing 'id' column.")
-                can_compare = False
+            previous_df_display_state = st.session_state.get(session_key_orig_df) # This was storing the displayed part
 
-            if can_compare and not edited_df.equals(previous_df_state):
-                # original_df_for_save for auto-save should be the state *before* the current edit cycle began,
-                # which is what we stored in session_state.
+            # The edited_df_display_output does not have 'id'. previous_df_display_state also does not.
+            # Comparison is fine.
+            can_compare_auto_save = True # Simplified, assuming shapes and columns match by construction
+            if previous_df_display_state is None:
+                 can_compare_auto_save = False
+
+            if can_compare_auto_save and not edited_df_display_output.equals(previous_df_display_state):
+                # For auto-save, handle_save_changes needs to be adapted.
+                # original_df (for handle_save_changes) is original_df_for_save (which has 'id')
+                # edited_df (for handle_save_changes) is edited_df_display_output (which does NOT have 'id')
+                # This will require handle_save_changes to be refactored to map rows by index.
+                # This refactoring of handle_save_changes is outside the scope of Part 1 of the subtask.
+                # For now, this auto-save logic will likely fail or misbehave if handle_save_changes is not updated.
+
+                # The 'editable_columns' also needs to be consistent with what was in df_for_editor_display
+                actual_editable_columns_for_save = [
+                    col for col in editable_columns if col in df_for_editor_display.columns
+                ]
+
                 if handle_save_changes(
-                    original_df=previous_df_state, # Use the state from before this potential edit
-                    edited_df=edited_df,
+                    original_df=original_df_for_save, # This has 'id' and all original columns
+                    edited_df=edited_df_display_output, # This is the output from editor, range index, subset of columns
                     repository=repository,
                     entity_name_singular=entity_name_singular,
-                    editable_columns=editable_columns,
+                    editable_columns=actual_editable_columns_for_save,
                     required_fields=required_fields,
                     decimal_fields=decimal_fields,
                     special_conversions=special_conversions,
                     fields_to_remove_before_update=fields_to_remove_before_update
                 ):
-                    # If changes were successfully processed, update the stored "original" state
-                    st.session_state[session_key_orig_df] = edited_df.copy()
+                    # If changes were successfully processed, update the stored "original" state for auto-save
+                    st.session_state[session_key_orig_df] = edited_df_display_output.copy()
                     st.rerun() # Rerun to reflect saved changes and clear editor's internal state
         else: # Manual save button
-            # original_df_for_save is a fresh copy of df_filtered before editor display for this render cycle
             if st.button(f"Salvar Alterações em {entity_name_plural}", key=f"save_{key_suffix}"):
-                if edited_df is not None: # edited_df can be None if df_to_pass_to_editor was None/empty
+                if edited_df_display_output is not None:
+                    # original_df_for_save has 'id' and all original columns.
+                    # edited_df_display_output is the direct output from the editor (range index, subset of columns).
+                    # handle_save_changes needs to be able to reconcile these.
+                    # As noted above, this will require modification of handle_save_changes.
+                    actual_editable_columns_for_save = [
+                        col for col in editable_columns if col in df_for_editor_display.columns
+                    ]
                     if handle_save_changes(
-                        original_df=original_df_for_save, # Use df_filtered from current render cycle
-                        edited_df=edited_df,
+                        original_df=original_df_for_save,
+                        edited_df=edited_df_display_output,
                         repository=repository,
                         entity_name_singular=entity_name_singular,
-                        editable_columns=editable_columns,
+                        editable_columns=actual_editable_columns_for_save,
                         required_fields=required_fields,
                         decimal_fields=decimal_fields,
                         special_conversions=special_conversions,
                         fields_to_remove_before_update=fields_to_remove_before_update
                     ):
-                        # After manual save, update the session state if auto-save might be used later
-                        # or if other parts of app rely on this session state.
-                        # For now, let's assume manual save doesn't need to interact with session_key_orig_df
-                        # unless auto_save can be dynamically toggled for the same component instance.
                         st.rerun()
-                elif original_df_for_save.empty and (edited_df is None or edited_df.empty):
+                elif original_df_for_save.empty and (edited_df_display_output is None or edited_df_display_output.empty):
                      st.info(f"Nenhum dado para salvar em {entity_name_plural}.")
