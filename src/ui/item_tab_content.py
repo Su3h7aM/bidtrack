@@ -13,7 +13,7 @@ def display_items_tab(item_repo, bidding_repo): # item_repo: ItemRepository, bid
         "repository_for_options": bidding_repo, # Passed to the function
         "options_map_config": {
             "name_col": "process_number", # Or another representative column from Bidding model
-            "extra_cols": ["city", "mode"], # Show city and mode
+            "extra_cols": ["city", "process_number", "mode"], # Show city and mode
             "default_message": "Selecione uma Licitação...",
         },
         "filter_column_on_df": "bidding_id", # This is the FK column in the Item model
