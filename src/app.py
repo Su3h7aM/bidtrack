@@ -126,23 +126,17 @@ def show_main_view():
             return
 
         # Ensure both are DataFrames
-        # Convert edited_quotes_data to DataFrame based on its type
-        if isinstance(edited_quotes_data, pd.DataFrame):
-            edited_quotes_df = edited_quotes_data
-        elif isinstance(edited_quotes_data, list):
+        # Convert edited_quotes_data to DataFrame based on its type, with specified order
+        if isinstance(edited_quotes_data, list):
             edited_quotes_df = pd.DataFrame(edited_quotes_data)
         elif isinstance(edited_quotes_data, dict):
             if not edited_quotes_data: # Empty dict
                 edited_quotes_df = pd.DataFrame()
-            else:
-                # If it's a dict, attempt to convert using from_dict with orient='index'.
-                # This implies a structure like {row_index: {col_name: value, ...}}
-                # If st.data_editor provides a flat dict for a single row like {col_name: value, ...},
-                # pd.DataFrame.from_dict with orient='index' would not produce the desired DataFrame structure.
-                # However, the prompt specifically asks for this behavior without the try-except fallback.
+            else: # Non-empty dict
                 edited_quotes_df = pd.DataFrame.from_dict(edited_quotes_data, orient='index')
-
-        else: # None or other unsupported types
+        elif isinstance(edited_quotes_data, pd.DataFrame): # Check if already a DataFrame
+            edited_quotes_df = edited_quotes_data
+        else: # Default for None or other unexpected types
             edited_quotes_df = pd.DataFrame()
 
         # original_quotes_data should already be a DataFrame if set correctly via get_quotes_dataframe().copy(),
@@ -260,17 +254,17 @@ def show_main_view():
             return
 
         # Ensure both are DataFrames
-        if isinstance(edited_bids_data, pd.DataFrame):
-            edited_bids_df = edited_bids_data
-        elif isinstance(edited_bids_data, list):
+        # Convert edited_bids_data to DataFrame based on its type, with specified order
+        if isinstance(edited_bids_data, list):
             edited_bids_df = pd.DataFrame(edited_bids_data)
         elif isinstance(edited_bids_data, dict):
             if not edited_bids_data: # Empty dict
                 edited_bids_df = pd.DataFrame()
-            else:
-                # Applying same logic as for quotes, as per prompt.
+            else: # Non-empty dict
                 edited_bids_df = pd.DataFrame.from_dict(edited_bids_data, orient='index')
-        else: # None or other unsupported types
+        elif isinstance(edited_bids_data, pd.DataFrame): # Check if already a DataFrame
+            edited_bids_df = edited_bids_data
+        else: # Default for None or other unexpected types
             edited_bids_df = pd.DataFrame()
 
         if not isinstance(original_bids_data, pd.DataFrame):
@@ -797,16 +791,16 @@ def show_main_view():
                         edited_quotes_data_for_plot = st.session_state.get('quotes_editor_main_view', []) # Default to list
                         # Initialize edited_quotes_df_for_plot (optional if all paths assign, but good for clarity)
                         # edited_quotes_df_for_plot = None
-                        if isinstance(edited_quotes_data_for_plot, pd.DataFrame):
-                            edited_quotes_df_for_plot = edited_quotes_data_for_plot
-                        elif isinstance(edited_quotes_data_for_plot, list):
+                        if isinstance(edited_quotes_data_for_plot, list):
                             edited_quotes_df_for_plot = pd.DataFrame(edited_quotes_data_for_plot)
                         elif isinstance(edited_quotes_data_for_plot, dict):
                             if not edited_quotes_data_for_plot: # Empty dict
                                 edited_quotes_df_for_plot = pd.DataFrame()
-                            else:
+                            else: # Non-empty dict
                                 edited_quotes_df_for_plot = pd.DataFrame.from_dict(edited_quotes_data_for_plot, orient='index')
-                        else: # None or other unsupported types
+                        elif isinstance(edited_quotes_data_for_plot, pd.DataFrame): # Check if already a DataFrame
+                            edited_quotes_df_for_plot = edited_quotes_data_for_plot
+                        else: # Default for None or other unexpected types
                             edited_quotes_df_for_plot = pd.DataFrame()
 
                         if (
