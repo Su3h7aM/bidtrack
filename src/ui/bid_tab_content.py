@@ -58,7 +58,7 @@ def display_bids_tab(bid_repo, bidding_repo, item_repo, bidder_repo):
         "repository_for_options": bidding_repo,
         "options_map_config": {
             "name_col": "process_number", # Assumes Bidding model has 'process_number'
-            "extra_cols": ["city", "mode"],
+            "extra_cols": ["city", "process_number", "mode"],
             "default_message": "Selecione uma Licitação...",
         },
         "filter_column_on_df": "bidding_id",
