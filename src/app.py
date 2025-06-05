@@ -588,7 +588,7 @@ def show_main_view():
                                 "notes": st.column_config.TextColumn(
                                     "Notas", help="Observações sobre o orçamento."
                                 ),
-                                "link": st.column_config.LinkColumn("Link do Produto", help="Link para a página do produto no site do fornecedor.", validate="^https?://[\w\.-]+"),
+                                "link": st.column_config.LinkColumn("Link do Produto", help="Link para a página do produto no site do fornecedor.", validate=r"^https?://[\w\.-]+"),
                             }
                             # Ensure all columns from original_quotes_df are present in config, adding None if missing
                             for col_name in original_quotes_df.columns:
