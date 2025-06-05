@@ -453,6 +453,7 @@ def show_main_view():
                         items_list=all_items_list
                     )
 
+                    edited_quotes_df = pd.DataFrame()
                     table_cols_display = st.columns(2)
                     with table_cols_display[0]:
                         st.markdown("##### Orçamentos do Item")
