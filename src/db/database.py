@@ -9,7 +9,8 @@ if DATABASE_URL is not None:
 
 
 def init_db():
-    SQLModel.metadata.create_all(engine)
+    # SQLModel.metadata.create_all(engine)
+    pass
 
 
 def get_session() -> Generator[Session, None, None]:

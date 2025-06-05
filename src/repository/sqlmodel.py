@@ -11,7 +11,7 @@ class SQLModelRepository[T: SQLModel](Repository[T]):
     ) -> None:
         self.model: type[T] = model
         self.engine: Engine = create_engine(db_url)
-        SQLModel.metadata.create_all(self.engine) # Ensure tables are created
+        # SQLModel.metadata.create_all(self.engine) # Ensure tables are created
 
     @override
     def add(self, item: T) -> T:
