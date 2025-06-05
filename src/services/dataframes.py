@@ -1,6 +1,6 @@
 import pandas as pd
 from decimal import Decimal, InvalidOperation
-from src.db.models import ( # Corrected import path
+from db.models import (
     Quote,
     Bid,
     Supplier,

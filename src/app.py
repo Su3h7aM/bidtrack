@@ -336,6 +336,7 @@ def show_main_view():
                                 quote_notes = st.text_area(
                                     "Notas do Orçamento", key="quote_notes_input_exp"
                                 )
+                                quote_link = st.text_input("Link do Produto (Opcional)", key="quote_link_input_exp")
                                 if st.form_submit_button("💾 Salvar Orçamento"):
                                     if (
                                         selected_supplier_id_quote
@@ -354,9 +355,8 @@ def show_main_view():
                                                 ),
                                                 taxes=Decimal(str(quote_taxes)),
                                                 margin=quote_margin,
-                                                notes=quote_notes
-                                                if quote_notes
-                                                else None,
+                                                notes=quote_notes if quote_notes else None,
+                                                link=quote_link if quote_link else None, # Added line
                                             )
                                             added_quote = quote_repo.add(
                                                 new_quote_instance
