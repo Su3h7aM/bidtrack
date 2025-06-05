@@ -98,7 +98,7 @@ def display_quotes_tab(quote_repo, bidding_repo, item_repo, supplier_repo):
         "margin": st.column_config.NumberColumn("Margem (%)", format="%.2f", required=True, help="Margem de lucro desejada sobre o preço com impostos (ex: 20 para 20%)."),
         "calculated_price": st.column_config.NumberColumn("Preço Final Calculado", format="R$ %.2f", disabled=True, help="Preço final do orçamento para o cliente."),
         "notes": st.column_config.TextColumn("Notas", help="Observações adicionais sobre o orçamento (opcional)."),
-        "link": st.column_config.TextColumn("Link do Produto", help="Link para a página do produto no site do fornecedor (opcional)."),
+        "link": st.column_config.LinkColumn("Link do Produto", help="Link para a página do produto no site do fornecedor (opcional).", validate="^https?://[\w\.-]+"),
         "item_id": st.column_config.NumberColumn("ID Item (Ref)", disabled=True),
         "supplier_id": st.column_config.NumberColumn("ID Fornecedor (Ref)", disabled=True),
         # Dates are now datetime objects from service, Streamlit will format them.
