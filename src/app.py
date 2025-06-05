@@ -620,7 +620,7 @@ def show_main_view():
                                     "additional_costs",
                                     "taxes",
                                     "margin",
-                                    "notes",
+                                    "notes", "link"
                                 ]
 
                                 if not edited_quotes_df.empty:
@@ -723,7 +723,12 @@ def show_main_view():
                                                         f"Erro ao converter {col} no orçamento ID {quote_id}: {edited_value}. Erro: {e}"
                                                     )
                                                     continue
-                                            elif original_value != edited_value:
+                                            elif col in ["notes", "link"]:
+                                                # Process string fields, handling None and actual strings
+                                                processed_edited_value = str(edited_value) if pd.notna(edited_value) else None
+                                                if original_value != processed_edited_value:
+                                                    update_dict[col] = processed_edited_value
+                                            elif original_value != edited_value: # Fallback for any other column types
                                                 update_dict[col] = edited_value
 
                                         if update_dict:
