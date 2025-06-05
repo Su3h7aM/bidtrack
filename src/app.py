@@ -60,7 +60,7 @@ def initialize_session_state():
 
     # Navigation
     if "current_view" not in st.session_state:
-        st.session_state.current_view = "Main View"
+        st.session_state.current_view = "Principal"
 
 # --- Helper function to manage dialog visibility ---
 def _open_dialog_exclusively(dialog_type_to_open: str):
@@ -104,7 +104,7 @@ initialize_session_state()
 st.sidebar.title("Navegação")
 current_view = st.sidebar.radio(
     "Escolha uma visualização:",
-    ["Main View", "Management Tables"],
+    ["Principal", "Visão Geral"],
     key="navigation_radio" # Add key for explicit state management
 )
 if current_view != st.session_state.current_view:
@@ -555,6 +555,32 @@ def show_main_view():
                                                 changes_made = True
                                             except Exception as e:
                                                 st.error(f"Erro ao atualizar orçamento ID {quote_id}: {e}. Dados: {update_dict}")
+
+                                # --- DELETION LOGIC FOR QUOTES ---
+                                original_ids_quotes = set()
+                                if not original_quotes_df.empty and 'id' in original_quotes_df.columns:
+                                    original_ids_quotes = set(original_quotes_df['id'])
+                                elif not original_quotes_df.empty:
+                                    st.warning("Tabela de orçamentos original não possui coluna 'id'. Deleção de orçamentos não pode ser processada.")
+
+                                edited_ids_quotes = set()
+                                if not edited_quotes_df.empty and 'id' in edited_quotes_df.columns:
+                                    edited_ids_quotes = set(edited_quotes_df['id'])
+                                elif not edited_quotes_df.empty and 'id' not in edited_quotes_df.columns:
+                                    st.warning("Tabela de orçamentos editada não possui coluna 'id'. Deleção de orçamentos pode ser imprecisa.")
+
+                                if not original_quotes_df.empty and 'id' in original_quotes_df.columns:
+                                    deleted_quote_ids = original_ids_quotes - edited_ids_quotes
+
+                                    if deleted_quote_ids:
+                                        for quote_id_to_delete in deleted_quote_ids:
+                                            try:
+                                                quote_repo.delete(quote_id_to_delete)
+                                                st.success(f"Orçamento ID {quote_id_to_delete} deletado com sucesso.")
+                                                changes_made = True
+                                            except Exception as e:
+                                                st.error(f"Erro ao deletar orçamento ID {quote_id_to_delete}: {e}")
+
                                 if changes_made:
                                     st.rerun()
                         else:
@@ -657,6 +683,32 @@ def show_main_view():
                                                 changes_made = True
                                             except Exception as e:
                                                 st.error(f"Erro ao atualizar lance ID {bid_id}: {e}. Dados: {update_dict}")
+
+                                # --- DELETION LOGIC FOR BIDS ---
+                                original_ids_bids = set()
+                                if not original_bids_df.empty and 'id' in original_bids_df.columns:
+                                    original_ids_bids = set(original_bids_df['id'])
+                                elif not original_bids_df.empty:
+                                    st.warning("Tabela de lances original não possui coluna 'id'. Deleção de lances não pode ser processada.")
+
+                                edited_ids_bids = set()
+                                if not edited_bids_df.empty and 'id' in edited_bids_df.columns:
+                                    edited_ids_bids = set(edited_bids_df['id'])
+                                elif not edited_bids_df.empty and 'id' not in edited_bids_df.columns:
+                                    st.warning("Tabela de lances editada não possui coluna 'id'. Deleção de lances pode ser imprecisa.")
+
+                                if not original_bids_df.empty and 'id' in original_bids_df.columns:
+                                    deleted_bid_ids = original_ids_bids - edited_ids_bids
+
+                                    if deleted_bid_ids:
+                                        for bid_id_to_delete in deleted_bid_ids:
+                                            try:
+                                                bid_repo.delete(bid_id_to_delete)
+                                                st.success(f"Lance ID {bid_id_to_delete} deletado com sucesso.")
+                                                changes_made = True
+                                            except Exception as e:
+                                                st.error(f"Erro ao deletar lance ID {bid_id_to_delete}: {e}")
+
                                 if changes_made:
                                     st.rerun()
                         else:
@@ -744,7 +796,7 @@ set_dialog_repositories(
 st.title(APP_TITLE)
 
 # --- Conditional View Rendering ---
-if st.session_state.current_view == "Main View":
+if st.session_state.current_view == "Principal":
     show_main_view()
-elif st.session_state.current_view == "Management Tables":
+elif st.session_state.current_view == "Visão Geral":
     show_management_tables_view(bidding_repo, item_repo, supplier_repo, quote_repo, bidder_repo, bid_repo)
