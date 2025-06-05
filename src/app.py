@@ -336,6 +336,7 @@ def show_main_view():
                                 quote_notes = st.text_area(
                                     "Notas do Orçamento", key="quote_notes_input_exp"
                                 )
+                                quote_link = st.text_input("Link do Produto (Opcional)", key="quote_link_input_exp")
                                 if st.form_submit_button("💾 Salvar Orçamento"):
                                     if (
                                         selected_supplier_id_quote
@@ -354,9 +355,8 @@ def show_main_view():
                                                 ),
                                                 taxes=Decimal(str(quote_taxes)),
                                                 margin=quote_margin,
-                                                notes=quote_notes
-                                                if quote_notes
-                                                else None,
+                                                notes=quote_notes if quote_notes else None,
+                                                link=quote_link if quote_link else None, # Added line
                                             )
                                             added_quote = quote_repo.add(
                                                 new_quote_instance
@@ -588,6 +588,7 @@ def show_main_view():
                                 "notes": st.column_config.TextColumn(
                                     "Notas", help="Observações sobre o orçamento."
                                 ),
+                                "link": st.column_config.LinkColumn("Link do Produto", help="Link para a página do produto no site do fornecedor.", validate=r"^https?://[\w\.-]+"),
                             }
                             # Ensure all columns from original_quotes_df are present in config, adding None if missing
                             for col_name in original_quotes_df.columns:
@@ -619,7 +620,7 @@ def show_main_view():
                                     "additional_costs",
                                     "taxes",
                                     "margin",
-                                    "notes",
+                                    "notes", "link"
                                 ]
 
                                 if not edited_quotes_df.empty:
@@ -722,7 +723,12 @@ def show_main_view():
                                                         f"Erro ao converter {col} no orçamento ID {quote_id}: {edited_value}. Erro: {e}"
                                                     )
                                                     continue
-                                            elif original_value != edited_value:
+                                            elif col in ["notes", "link"]:
+                                                # Process string fields, handling None and actual strings
+                                                processed_edited_value = str(edited_value) if pd.notna(edited_value) else None
+                                                if original_value != processed_edited_value:
+                                                    update_dict[col] = processed_edited_value
+                                            elif original_value != edited_value: # Fallback for any other column types
                                                 update_dict[col] = edited_value
 
                                         if update_dict:

@@ -23,6 +23,65 @@ Ideal para empresas, consultorias ou municípios que monitoram licitações no B
 * **Plotly**: gráficos interativos
 * **UV da Astral**: gerenciamento de dependências e scripts de projeto
 
+## 🗄️ Database Migrations (Alembic)
+
+This project uses [Alembic](https://alembic.sqlalchemy.org/en/latest/) to manage database schema changes. This is essential now that the project is in production to avoid data loss.
+
+**Important**: Before running any Alembic commands, ensure your `DATABASE_URL` environment variable is correctly set to point to your target database (development or production). Alembic commands should generally be run from the `src` directory, as this is where `alembic.ini` is located.
+
+### Key Commands:
+
+1.  **Generating a New Migration Script:**
+
+    After you make changes to your `SQLModel` definitions in `src/db/models.py` (e.g., add a new table, add/remove a column, change a data type), you need to generate a migration script:
+    ```bash
+    # Navigate to the src directory
+    cd src
+    alembic revision -m "short_description_of_your_change" --autogenerate
+    # Example: alembic revision -m "add_link_column_to_quote_table" --autogenerate
+    cd ..
+    ```
+    This command will compare your models against the current state of the database (as Alembic understands it) and generate a new script in `src/alembic/versions/`. Always review the generated script to ensure it matches your intended changes.
+
+2.  **Applying Migrations:**
+
+    To apply pending migrations to your database (i.e., update the database schema to the latest version):
+    ```bash
+    # Navigate to the src directory
+    cd src
+    alembic upgrade head
+    cd ..
+    ```
+    `head` refers to the latest revision. You can also upgrade or downgrade to specific revisions.
+
+3.  **Checking Current Database Revision:**
+
+    To see the current revision of your database:
+    ```bash
+    # Navigate to the src directory
+    cd src
+    alembic current
+    cd ..
+    ```
+
+4.  **Downgrading a Migration (Use with caution):**
+
+    To revert the last applied migration:
+    ```bash
+    # Navigate to the src directory
+    cd src
+    alembic downgrade -1
+    cd ..
+    ```
+    Or to a specific revision:
+    ```bash
+    # Navigate to the src directory
+    cd src
+    alembic downgrade <revision_id>
+    cd ..
+    ```
+    Downgrading can be risky, especially if the migration involves data loss. Always back up your production database before performing downgrades or complex upgrades.
+
 ## 🗄️ Esquema do Banco de Dados
 
 | Modelo         | Descrição                                                         |
@@ -51,11 +110,17 @@ As relações many-to-many são modeladas pelas tabelas de ligação `Quote` e `
    uv sync             # instala todas as dependências definidas
    ```
 
-3. **Inicialize o banco de dados**
+3. **Setup and Migrate the Database**
 
+   Ensure the `DATABASE_URL` environment variable is set to your target database.
+   Then, apply migrations:
    ```bash
-   uv run create-db      # cria o banco SQLite e as tabelas
+   # Navigate to the src directory if you are in the project root
+   cd src
+   alembic upgrade head  # Applies all pending migrations
+   cd .. # Return to project root
    ```
+   The `uv run create-db` script might still be useful for other initialization tasks, but schema creation is now handled by Alembic.
 
 ## ▶️ Como Executar
 

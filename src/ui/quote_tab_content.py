@@ -84,7 +84,7 @@ def display_quotes_tab(quote_repo, bidding_repo, item_repo, supplier_repo):
     # User-facing display columns in the editor:
     quote_cols_to_display = [
         "item_name", "supplier_name", "price", "freight", "additional_costs",
-        "taxes", "margin", "calculated_price", "notes"
+        "taxes", "margin", "calculated_price", "notes", "link" # Added "link"
     ]
 
     quote_column_config = {
@@ -98,6 +98,7 @@ def display_quotes_tab(quote_repo, bidding_repo, item_repo, supplier_repo):
         "margin": st.column_config.NumberColumn("Margem (%)", format="%.2f", required=True, help="Margem de lucro desejada sobre o preço com impostos (ex: 20 para 20%)."),
         "calculated_price": st.column_config.NumberColumn("Preço Final Calculado", format="R$ %.2f", disabled=True, help="Preço final do orçamento para o cliente."),
         "notes": st.column_config.TextColumn("Notas", help="Observações adicionais sobre o orçamento (opcional)."),
+        "link": st.column_config.LinkColumn("Link do Produto", help="Link para a página do produto no site do fornecedor (opcional).", validate=r"^https?://[\w\.-]+"),
         "item_id": st.column_config.NumberColumn("ID Item (Ref)", disabled=True),
         "supplier_id": st.column_config.NumberColumn("ID Fornecedor (Ref)", disabled=True),
         # Dates are now datetime objects from service, Streamlit will format them.
@@ -113,7 +114,7 @@ def display_quotes_tab(quote_repo, bidding_repo, item_repo, supplier_repo):
         column_config=quote_column_config,
         search_columns=["item_name", "supplier_name", "notes"],
         custom_search_label="Buscar Orçamentos (por item, fornecedor, notas):",
-        editable_columns=["price", "freight", "additional_costs", "taxes", "margin", "notes"],
+        editable_columns=["price", "freight", "additional_costs", "taxes", "margin", "notes", "link"], # Added "link"
         required_fields=["price", "margin", "item_id", "supplier_id"],
         decimal_fields=["price", "freight", "additional_costs", "taxes", "margin"], # Still needed for handle_save_changes
         fields_to_remove_before_update=['item_name', 'supplier_name', 'calculated_price'], # These are display-only

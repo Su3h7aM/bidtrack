@@ -31,7 +31,7 @@ def get_quotes_dataframe(
         return pd.DataFrame(
             columns=[
                 "id", "item_id", "supplier_id", "price", "freight", "additional_costs",
-                "taxes", "margin", "notes", "created_at", "updated_at",
+                "taxes", "margin", "notes", "link", "created_at", "updated_at", # Added "link"
                 "supplier_name", "item_name", "calculated_price"
             ]
         )
@@ -97,7 +97,7 @@ def get_quotes_dataframe(
     # This ensures consistency in column order and presence.
     final_columns = [
         "id", "item_name", "supplier_name", "price", "freight", "additional_costs",
-        "taxes", "margin", "calculated_price", "notes",
+        "taxes", "margin", "calculated_price", "notes", "link", # Added "link"
         "item_id", "supplier_id", "created_at", "updated_at"
     ]
     

@@ -52,6 +52,7 @@ class Quote(SQLModel, table=True):
 
     margin: float  # This might need re-evaluation or be calculated differently now
     notes: str | None = Field(default=None)
+    link: Optional[str] = Field(default=None, nullable=True) # New field
 
 
 class Bid(SQLModel, table=True):

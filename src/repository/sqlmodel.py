@@ -7,11 +7,14 @@ from .interface import Repository # Updated import for the interface
 
 class SQLModelRepository[T: SQLModel](Repository[T]):
     def __init__(
-        self, model: type[T], db_url: str = "sqlite:///data/bidtrack.db"
+        self, model: type[T], db_url: str = "sqlite:///data/bidtrack.db", engine_instance: Engine | None = None
     ) -> None:
         self.model: type[T] = model
-        self.engine: Engine = create_engine(db_url)
-        SQLModel.metadata.create_all(self.engine) # Ensure tables are created
+        if engine_instance:
+            self.engine = engine_instance
+        else:
+            self.engine = create_engine(db_url)
+        # SQLModel.metadata.create_all(self.engine) # Ensure tables are created
 
     @override
     def add(self, item: T) -> T:
