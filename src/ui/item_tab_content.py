@@ -21,15 +21,16 @@ def display_items_tab(item_repo, bidding_repo): # item_repo: ItemRepository, bid
     }
 
     # Columns specifically for user display in st.data_editor
-    item_cols_to_display = ["name", "description", "code", "quantity", "unit"]
+    item_cols_to_display = ["name", "desc", "code", "quantity", "unit", "notes"]
 
     item_column_config = {
         "id": st.column_config.NumberColumn("ID", disabled=True, help="ID único do item."),
         "name": st.column_config.TextColumn("Nome do Item", required=True, help="Nome descritivo do item."),
-        "description": st.column_config.TextColumn("Descrição Detalhada", help="Descrição mais completa do item (opcional)."),
+        "desc": st.column_config.TextColumn("Descrição Detalhada", help="Descrição mais completa do item (opcional)."),
         "code": st.column_config.TextColumn("Código do Item", help="Código ou SKU do item (opcional)."),
         "quantity": st.column_config.NumberColumn("Quantidade", format="%.2f", min_value=0.00, required=True, help="Quantidade necessária do item."),
         "unit": st.column_config.TextColumn("Unidade", required=True, help="Unidade de medida do item (ex: un, kg, m²)."),
+        "notes": st.column_config.TextColumn("Observações", help="Observações adicionais sobre o item (opcional)."),
         "bidding_id": st.column_config.NumberColumn("ID da Licitação", disabled=True, help="ID da licitação à qual este item pertence."),
         "created_at": st.column_config.DatetimeColumn("Criado em", format="YYYY-MM-DD HH:mm", disabled=True),
         "updated_at": st.column_config.DatetimeColumn("Atualizado em", format="YYYY-MM-DD HH:mm", disabled=True),
@@ -41,9 +42,9 @@ def display_items_tab(item_repo, bidding_repo): # item_repo: ItemRepository, bid
         entity_name_plural="Itens",
         columns_to_display=item_cols_to_display,
         column_config=item_column_config,
-        search_columns=["name", "description", "code"],
-        custom_search_label="Buscar Itens (por nome, descrição, código):",
-        editable_columns=["name", "description", "code", "quantity", "unit"],
+        search_columns=["name", "desc", "code", "notes"],
+        custom_search_label="Buscar Itens (por nome, descrição, código, observações):",
+        editable_columns=["name", "desc", "code", "quantity", "unit", "notes"],
         # bidding_id is required for an item, but it's set by the parent selection, not direct edit here
         required_fields=["name", "quantity", "unit", "bidding_id"],
         # No fields_to_remove_before_update needed specifically for bidding_id as it's not editable.

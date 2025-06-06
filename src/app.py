@@ -262,6 +262,7 @@ def show_main_view():
                     st.markdown(
                         f"**Quantidade:** {current_item_details.quantity} {current_item_details.unit}"
                     )
+                    st.markdown(f"**Observações:** {current_item_details.notes if current_item_details.notes else 'N/A'}")
 
                     st.subheader("Orçamentos e Lances")
                     expander_cols = st.columns(2)
