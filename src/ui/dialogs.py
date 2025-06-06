@@ -382,7 +382,7 @@ def _manage_generic_dialog(
             with form_action_cols[1]:
                 if st.form_submit_button(f"🗑️ Deletar {title_singular}", type="secondary", use_container_width=True):
                     st.session_state[confirm_delete_key] = True
-                    st.rerun() # Rerun to show confirmation dialog part
+                    # NO st.rerun() here.
 
     if st.session_state.get(confirm_delete_key, False):
         entity_name_display = data.get("name", data.get("process_number", str(editing_id)))
