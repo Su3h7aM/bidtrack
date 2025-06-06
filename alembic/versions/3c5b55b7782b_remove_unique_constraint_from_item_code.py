@@ -25,6 +25,7 @@ def upgrade() -> None:
         batch_op.alter_column(
             "code", existing_type=sa.VARCHAR(), nullable=False, unique=False
         )
+        batch_op.drop_constraint("uq_item_code", type_="unique")
 
 
 def downgrade() -> None:
@@ -33,3 +34,4 @@ def downgrade() -> None:
         batch_op.alter_column(
             "code", existing_type=sa.VARCHAR(), nullable=False, unique=True
         )
+        batch_op.create_unique_constraint("uq_item_code", ["code"])
