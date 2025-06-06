@@ -124,11 +124,12 @@ class Item(SQLModel, table=True):
         sa_column=Column(DateTime, default=datetime.now(), onupdate=datetime.now()),
     )
 
-    code: str | None = Field(default=None, nullable=True) # New field
-    name: str = Field(unique=True)
+    code: str = Field(unique=True, nullable=False) # New field
+    name: str
     desc: str | None = Field(default=None)
-    unit: str | None = Field(default=None)
+    unit: str = Field(nullable=False)
     quantity: float
+    notes: str | None = Field(default=None)
 
     bidding_id: int | None = Field(
         foreign_key="bidding.id", nullable=False, ondelete="CASCADE"
