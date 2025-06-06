@@ -124,7 +124,7 @@ class Item(SQLModel, table=True):
         sa_column=Column(DateTime, default=datetime.now(), onupdate=datetime.now()),
     )
 
-    code: str = Field(unique=True, nullable=False) # New field
+    code: str = Field(nullable=False) # New field
     name: str
     desc: str | None = Field(default=None)
     unit: str = Field(nullable=False)
