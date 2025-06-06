@@ -65,6 +65,12 @@ item_form_config = {
         "default": "UN",
         "required": True,
     },
+    "notes": {
+        "label": "Observações",
+        "type": "text_area",
+        "default": "",
+        "required": False,
+    },
 }
 contact_entity_form_config = {
     "name": {"label": "Nome*", "type": "text_input", "required": True},
