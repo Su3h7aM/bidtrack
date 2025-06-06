@@ -438,82 +438,247 @@ def display_entity_management_ui(
     # This df_filtered contains all columns, including 'id'.
     # original_df_for_save is a copy of this, used by handle_save_changes. It will be indexed by 'id'.
 
-    # Part 1: Modify display_entity_management_ui (Column Hiding Strategy)
-    df_full_data = df_filtered if df_filtered is not None else pd.DataFrame()
+    # Part 1: Prepare DataFrame for display (df_for_editor_display)
+    df_for_editor_display = pd.DataFrame()
+    if df_filtered is not None and not df_filtered.empty:
+        # Ensure 'id' is always included if it exists in df_filtered, even if not in columns_to_display,
+        # as it's crucial for merging data back. However, it will be hidden by column_config if not in columns_to_display.
+        cols_for_display_df = columns_to_display[:]
+        if 'id' in df_filtered.columns and 'id' not in cols_for_display_df:
+            cols_for_display_df.append('id')
 
+        # Select only the necessary columns for the editor DataFrame
+        # Make sure all columns in cols_for_display_df exist in df_filtered, add if not (though they should be)
+        final_cols_for_editor = []
+        for col in cols_for_display_df:
+            if col not in df_filtered.columns:
+                # This case should ideally not happen if columns_to_display is derived from model or valid df columns
+                df_filtered[col] = None # Add missing column with None
+            final_cols_for_editor.append(col)
+        df_for_editor_display = df_filtered[final_cols_for_editor].copy()
+    elif df_filtered is not None: # df_filtered is an empty DataFrame
+        df_for_editor_display = pd.DataFrame(columns=columns_to_display) # Create empty with display columns
+        if 'id' not in df_for_editor_display.columns and 'id' in df_filtered.columns : # ensure id if in original
+            df_for_editor_display['id'] = None
+
+
+    # Configure column visibility for the editor based on columns_to_display
     final_column_config_for_editor = {}
-    if not df_full_data.empty:
-        for col_name in df_full_data.columns:
-            if col_name in columns_to_display:
+    if not df_for_editor_display.empty:
+        for col_name in df_for_editor_display.columns: # Iterate over columns PRESENT in df_for_editor_display
+            if col_name in columns_to_display: # Make sure it's an intended display column
                 final_column_config_for_editor[col_name] = column_config.get(col_name)
-            else:
+            else: # This applies to 'id' if it was added but not in original columns_to_display
                 final_column_config_for_editor[col_name] = None # Hide column
-    else: # df_full_data is empty, use original column_config
-        final_column_config_for_editor = column_config.copy()
+    # If df_for_editor_display is empty, final_column_config_for_editor also remains empty,
+    # which is fine for an empty editor. Or, we could use the original column_config
+    # for the schema, but st.data_editor handles empty df with empty config.
 
-    session_key_orig_df = f'{editor_key_suffix}_orig_df_for_autosave'
+    session_key_orig_df_for_autosave_comparison = f'{editor_key_suffix}_orig_df_for_autosave_compare'
 
     if is_editable and auto_save:
         # For auto-save, the comparison df (previous_df_state) should match the structure of
-        # what edited_df_output will be (all columns, range index).
-        # So, st.session_state[session_key_orig_df] should store df_full_data.copy()
-        if session_key_orig_df not in st.session_state or \
-           not st.session_state[session_key_orig_df].equals(df_full_data): # More robust check
-            st.session_state[session_key_orig_df] = df_full_data.copy()
+        # what editor will show: df_for_editor_display (subset of columns, range index).
+        if session_key_orig_df_for_autosave_comparison not in st.session_state or \
+           not st.session_state[session_key_orig_df_for_autosave_comparison].equals(df_for_editor_display):
+            st.session_state[session_key_orig_df_for_autosave_comparison] = df_for_editor_display.copy()
 
-    # display_data_editor is called with df_full_data.
-    # Its output, edited_df_output, will have all columns from df_full_data.
-    # display_data_editor uses hide_index=True, so edited_df_output has a range index.
-    edited_df_output = display_data_editor(
-        df_to_edit=df_full_data,
+    # display_data_editor is called with df_for_editor_display (subset of columns).
+    # Its output, edited_df_from_editor, will have the same columns as df_for_editor_display.
+    # It will have a range index because hide_index=True is used.
+    edited_df_from_editor = display_data_editor(
+        df_to_edit=df_for_editor_display,
         column_config=final_column_config_for_editor,
-        editor_key_suffix=editor_key_suffix,
+        editor_key_suffix=key_suffix, # Use the general key_suffix for editor
         is_editable=is_editable
     )
 
+    # Part 2: Reconstruct edited_df_for_save before calling handle_save_changes
+    # original_df_for_save is indexed by 'id' and has all original columns.
+    # edited_df_from_editor has a range_index and only display columns (incl 'id' if added).
+    edited_df_reconstructed_for_save = pd.DataFrame()
+
+    if not edited_df_from_editor.empty and 'id' in edited_df_from_editor.columns:
+        # Start with a copy of the original data, indexed by 'id'
+        edited_df_reconstructed_for_save = original_df_for_save.copy()
+        # Iterate through the rows of the edited data (from the editor)
+        for _, edited_row_series in edited_df_from_editor.iterrows():
+            entity_id = edited_row_series['id']
+            if entity_id in edited_df_reconstructed_for_save.index:
+                for col_name in edited_row_series.index:
+                    if col_name == 'id': continue # Don't try to update 'id' column itself via this loop
+                    if col_name in edited_df_reconstructed_for_save.columns:
+                         # Update the corresponding cell in the reconstructed DataFrame
+                        edited_df_reconstructed_for_save.loc[entity_id, col_name] = edited_row_series[col_name]
+            # else: row with this id was not in original_df_for_save (e.g. new row in editor not yet supported by save)
+        # Now edited_df_reconstructed_for_save has original data + updates from editor, and is indexed by 'id'.
+        # For handle_save_changes, we need it to have a range index, like the editor output.
+        # So, reset index. handle_save_changes will use 'id' column for matching.
+        edited_df_reconstructed_for_save = edited_df_reconstructed_for_save.reset_index(drop=True)
+
+    elif edited_df_from_editor.empty and not df_for_editor_display.empty :
+        # Editor was cleared, but there was data. This means all rows were deleted.
+        # Reconstruct an empty df with same columns as original_df_for_save to signify deletions for handle_save_changes
+        # Current handle_save_changes might not support mass deletion this way, but for consistency:
+        edited_df_reconstructed_for_save = pd.DataFrame(columns=original_df_for_save.columns)
+    else: # No data to edit or no edits made, or 'id' column missing in editor output
+        edited_df_reconstructed_for_save = original_df_for_save.reset_index(drop=True) if original_df_for_save is not None else pd.DataFrame()
+
+
     if is_editable:
+        actions_taken_this_pass = False
+        deletions_successfully_made_this_pass = False
+        updates_made_by_hsc = False
+
+        # --- Deletion Logic (Common for Auto-Save and Manual Save) ---
+        # This logic runs before handle_save_changes if auto_save is on and editor changed,
+        # or inside button click if manual save.
+        # For auto-save, this section is conceptually part of the "change detection"
+
+        # Condition to check if editor content differs from the initial state for this pass (df_for_editor_display)
+        # This helps decide if we should proceed with deletions and updates.
+        editor_content_changed_from_initial = not edited_df_from_editor.equals(df_for_editor_display)
+
+        # Store a copy of original_df_for_save before any modifications in this pass
+        # This is important because original_df_for_save might be pruned by deletions
+        # and handle_save_changes needs the state *before* edits but *after* deletions.
+        # However, the current original_df_for_save is already set up correctly from df_filtered
+        # and represents the state before this specific editor interaction's changes.
+
+        # 1. Detect and Perform Deletions if editor content has changed or rows were removed
+        if 'id' in df_for_editor_display.columns and 'id' in edited_df_from_editor.columns:
+            try:
+                # Ensure 'id' columns are of a comparable type, handling potential NaNs from empty rows.
+                # df_for_editor_display might have NaNs if new (unsaved) rows were added then removed in editor.
+                ids_before_edit = set(df_for_editor_display['id'].dropna().astype(int))
+                ids_after_edit = set(edited_df_from_editor['id'].dropna().astype(int))
+                ids_to_delete = ids_before_edit - ids_after_edit
+
+                if ids_to_delete:
+                    for entity_id_to_delete in ids_to_delete:
+                        try:
+                            # Make sure to use int for repository call
+                            repository.delete(int(entity_id_to_delete))
+                            st.success(f"{entity_name_singular} ID {entity_id_to_delete} deletado(a) com sucesso.")
+                            deletions_successfully_made_this_pass = True
+                        except Exception as e:
+                            st.error(f"Erro ao deletar {entity_name_singular} ID {entity_id_to_delete}: {e}")
+
+                    if deletions_successfully_made_this_pass:
+                        actions_taken_this_pass = True
+                        # Update original_df_for_save to remove these deleted IDs
+                        # This ensures handle_save_changes works with the correct baseline.
+                        if not original_df_for_save.empty:
+                            # Ensure index is int type for comparison if it's not already
+                            if not pd.api.types.is_integer_dtype(original_df_for_save.index):
+                                try:
+                                    original_df_for_save.index = original_df_for_save.index.astype(int)
+                                except ValueError: # Handle cases where index might not be convertible to int (should not happen if IDs are ints)
+                                    st.warning("Não foi possível converter o índice do DataFrame original para inteiro para remoção de itens deletados.")
+
+                            # Filter out deleted ids. Use list(ids_to_delete) to avoid type issues.
+                            original_df_for_save = original_df_for_save.drop(index=list(ids_to_delete), errors='ignore')
+
+                            # Also, df_for_editor_display needs to be updated for the next comparison if auto-saving
+                            # This will be handled by using edited_df_from_editor for session state update.
+
+            except Exception as e:
+                st.error(f"Erro ao processar deleções: {e}")
+
+        # These are the columns that were actually editable in the UI
+        actual_editable_columns_for_save = [
+            col for col in editable_columns if col in columns_to_display and col in df_for_editor_display.columns
+        ]
+
+        # --- Auto-Save Logic ---
         if auto_save:
-            previous_df_state_for_autosave = st.session_state.get(session_key_orig_df) # This is full data
+            previous_df_state_for_autosave_compare = st.session_state.get(session_key_orig_df_for_autosave_comparison)
+            # Trigger save if deletions happened OR if editor content changed from its last saved state
+            # Note: previous_df_state_for_autosave_compare is df_for_editor_display from *previous* run.
+            # edited_df_from_editor is current editor state.
+            # df_for_editor_display is current initial state (before editor this run).
 
-            if previous_df_state_for_autosave is not None and \
-               not edited_df_output.equals(previous_df_state_for_autosave):
+            # We need to check if editor content changed compared to its initial state in *this* pass (df_for_editor_display)
+            # OR if deletions occurred this pass.
+            # The session state (previous_df_state_for_autosave_compare) is what editor looked like at start of *previous* successful save.
+            # So, the comparison should be: edited_df_from_editor vs previous_df_state_for_autosave_compare
 
-                # editable_columns is from tab_content files, refers to user-editable fields.
-                # These fields must be in columns_to_display.
-                actual_editable_columns = [
-                    col for col in editable_columns if col in columns_to_display and col in df_full_data.columns
-                ]
-                if handle_save_changes( # handle_save_changes expects original_df_for_save (indexed)
-                                        # and edited_df_output (range index, all columns, including 'id')
-                    original_df=original_df_for_save,
-                    edited_df=edited_df_output,
-                    repository=repository,
-                    entity_name_singular=entity_name_singular,
-                    editable_columns=actual_editable_columns,
-                    required_fields=required_fields,
-                    decimal_fields=decimal_fields,
-                    special_conversions=special_conversions,
-                    fields_to_remove_before_update=fields_to_remove_before_update
-                ):
-                    st.session_state[session_key_orig_df] = edited_df_output.copy() # Update session state with new full data
+            changed_vs_last_saved_state = not edited_df_from_editor.equals(previous_df_state_for_autosave_compare)
+
+            if deletions_successfully_made_this_pass or changed_vs_last_saved_state:
+                if not original_df_for_save.empty or not edited_df_reconstructed_for_save.empty or deletions_successfully_made_this_pass:
+                    if not deletions_successfully_made_this_pass and edited_df_reconstructed_for_save.empty and original_df_for_save.empty:
+                        # This case means editor was cleared, but no actual deletions from DB (was already empty)
+                        pass # No updates to make
+                    elif not edited_df_reconstructed_for_save.empty and not original_df_for_save.empty and original_df_for_save.equals(edited_df_reconstructed_for_save.set_index('id', drop=False)) and not deletions_successfully_made_this_pass :
+                        pass # No actual changes in values for existing rows, and no deletions
+                    else:
+                        updates_made_by_hsc = handle_save_changes(
+                            original_df=original_df_for_save,
+                            edited_df=edited_df_reconstructed_for_save,
+                            repository=repository,
+                            entity_name_singular=entity_name_singular,
+                            editable_columns=actual_editable_columns_for_save,
+                            required_fields=required_fields,
+                            decimal_fields=decimal_fields,
+                            special_conversions=special_conversions,
+                            fields_to_remove_before_update=fields_to_remove_before_update
+                        )
+                        if updates_made_by_hsc:
+                            actions_taken_this_pass = True
+
+                if actions_taken_this_pass: # True if deletions or updates occurred
+                    # Update session state with the new state from the editor
+                    st.session_state[session_key_orig_df_for_autosave_comparison] = edited_df_from_editor.copy()
                     st.rerun()
-        else: # Manual save button
+                # If only editor content changed but led to no DB action (e.g. invalid data not saved by HSC),
+                # we still need to update the session state to prevent immediate re-trigger if no further user change.
+                elif changed_vs_last_saved_state : # but not actions_taken_this_pass
+                     st.session_state[session_key_orig_df_for_autosave_comparison] = edited_df_from_editor.copy()
+                     # No rerun, but subsequent comparison will be against this new editor state.
+
+        # --- Manual Save Button Logic ---
+        else:
             if st.button(f"Salvar Alterações em {entity_name_plural}", key=f"save_{key_suffix}"):
-                if edited_df_output is not None:
-                    actual_editable_columns = [
-                        col for col in editable_columns if col in columns_to_display and col in df_full_data.columns
-                    ]
-                    if handle_save_changes(
-                        original_df=original_df_for_save,
-                        edited_df=edited_df_output,
-                        repository=repository,
-                        entity_name_singular=entity_name_singular,
-                        editable_columns=actual_editable_columns,
-                        required_fields=required_fields,
-                        decimal_fields=decimal_fields,
-                        special_conversions=special_conversions,
-                        fields_to_remove_before_update=fields_to_remove_before_update
-                    ):
-                        st.rerun()
-                elif original_df_for_save.empty and (edited_df_output is None or edited_df_output.empty):
-                     st.info(f"Nenhum dado para salvar em {entity_name_plural}.")
+                # Deletion logic is already executed above for both modes if editor content changed.
+                # For manual save, we ensure it runs if button is pressed, even if editor content didn't change (e.g. only deletions)
+                # The current placement of deletion logic (outside button) is fine if it's based on editor changes.
+                # Let's refine: deletion detection should happen if editor state changed.
+                # And handle_save_changes should also run if editor state changed or deletions occurred.
+
+                # Re-check deletions if button pressed, as they might have been undone or redone
+                # No, the current deletion logic runs once per pass based on df_for_editor_display vs edited_df_from_editor.
+                # This is fine. original_df_for_save is already updated if deletions happened.
+
+                # Now, call handle_save_changes based on the (potentially pruned by deletion) original_df_for_save
+                # and the reconstructed edited_df.
+                if not original_df_for_save.empty or not edited_df_reconstructed_for_save.empty:
+                     # Avoid calling if both are empty unless deletions happened (covered by actions_taken_this_pass)
+                    if edited_df_reconstructed_for_save.empty and original_df_for_save.empty and not deletions_successfully_made_this_pass:
+                        pass
+                    elif not edited_df_reconstructed_for_save.empty and not original_df_for_save.empty and original_df_for_save.equals(edited_df_reconstructed_for_save.set_index('id', drop=False)) and not deletions_successfully_made_this_pass :
+                        pass # No actual changes in values for existing rows, and no deletions
+                    else:
+                        updates_made_by_hsc = handle_save_changes(
+                            original_df=original_df_for_save,
+                            edited_df=edited_df_reconstructed_for_save,
+                            repository=repository,
+                            entity_name_singular=entity_name_singular,
+                            editable_columns=actual_editable_columns_for_save,
+                            required_fields=required_fields,
+                            decimal_fields=decimal_fields,
+                            special_conversions=special_conversions,
+                            fields_to_remove_before_update=fields_to_remove_before_update
+                        )
+                        if updates_made_by_hsc:
+                            actions_taken_this_pass = True
+
+                if actions_taken_this_pass:
+                    # Update session state with the new state from the editor for next auto-save cycle consistency
+                    st.session_state[session_key_orig_df_for_autosave_comparison] = edited_df_from_editor.copy()
+                    st.rerun()
+                # If button was pressed, but no DB actions taken (no deletions, no updates by HSC)
+                elif editor_content_changed_from_initial: # Check if editor content actually changed from its initial state this pass
+                     st.info("Alterações detectadas no editor, mas nenhuma ação de salvamento ou deleção foi executada (Ex: novas linhas não são salvas aqui, ou dados não validados).")
+                else: # No actions and no changes in editor compared to its initial state this pass
+                     st.info(f"Nenhuma alteração para salvar em {entity_name_plural}.")
