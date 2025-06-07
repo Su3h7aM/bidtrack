@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+from ui.utils import get_options_map # Import the updated utility
 from datetime import datetime, time, date
 from typing import Any, cast
 
@@ -84,6 +85,58 @@ contact_entity_form_config = {
     },
 }
 
+quote_form_config = {
+    "item_id": {
+        "label": "Item*",
+        "type": "fk_selectbox",
+        "fk_repository_name": "_item_repo",
+        "fk_name_col": "name",
+        "fk_code_col": "code", # Use item's code
+        "fk_default_message": "Selecione um Item...",
+        "required": True,
+    },
+    "supplier_id": {
+        "label": "Fornecedor*",
+        "type": "fk_selectbox",
+        "fk_repository_name": "_supplier_repo",
+        "fk_name_col": "name",
+        # No fk_code_col needed for supplier typically
+        "fk_default_message": "Selecione um Fornecedor...",
+        "required": True,
+    },
+    "price": {
+        "label": "Preço (R$)*",
+        "type": "number_input",
+        "min_value": 0.0,
+        "default": 0.01,
+        "required": True,
+        "step": 0.01,
+        "format": "%.2f",
+    },
+    "margin": { # Assuming margin is a percentage or factor
+        "label": "Margem (%)",
+        "type": "number_input",
+        "min_value": 0.0,
+        "default": 0.0,
+        "required": False,
+        "step": 0.01,
+        "format": "%.2f", # Or "%.0f%%" if you want to display as percentage
+    },
+    "notes": {
+        "label": "Observações",
+        "type": "text_area",
+        "default": "",
+        "required": False,
+    },
+    "link": {
+        "label": "Link (Opcional)",
+        "type": "text_input",
+        "default": "",
+        "required": False,
+    }
+    # Add other relevant fields for a Quote as needed
+}
+
 # --- Helper Functions for _manage_generic_dialog ---
 
 
@@ -154,6 +207,45 @@ def _render_form_fields(
                 step=config.get("step", 1),
                 format=config.get("format"),
             )
+        elif config["type"] == "fk_selectbox":
+            repo_name = config.get("fk_repository_name")
+            repo = globals().get(repo_name) if repo_name else None
+
+            if not repo:
+                st.error(f"Repositório '{repo_name}' não encontrado para o campo '{field_label}'.")
+                form_data_submitted[field] = None # Or handle error appropriately
+                continue
+
+            data_list = repo.get_all() if repo else []
+
+            name_col = config.get("fk_name_col", "name")
+            code_col = config.get("fk_code_col") # Will be None if not set, handled by get_options_map
+            extra_cols = config.get("fk_extra_cols") # Will be None if not set
+            default_message = config.get("fk_default_message", "Selecione...")
+
+            options_map, option_ids = get_options_map(
+                data_list,
+                name_col=name_col,
+                code_col=code_col,
+                extra_cols=extra_cols,
+                default_message=default_message,
+            )
+
+            # Determine current index for selectbox
+            current_id_value = current_data.get(field) # This would be the foreign key ID
+            try:
+                index = option_ids.index(current_id_value) if current_id_value in option_ids else 0
+            except ValueError: # Should not happen if None is always in option_ids as the first element
+                index = 0
+
+            selected_id = st.selectbox(
+                field_label,
+                options=option_ids,
+                index=index,
+                format_func=lambda x: options_map.get(x, default_message),
+            )
+            form_data_submitted[field] = selected_id # Store the selected ID
+
     return form_data_submitted
 
 
@@ -504,3 +596,35 @@ def manage_bidder_dialog_wrapper(): # Renamed function
 # For now, this file can be created, but the dialogs won't be fully functional.
 # The crucial part is that the function signatures and internal logic are moved.
 # The dependency injection for repositories will be finalized in the next step.
+
+
+@st.dialog("Gerenciar Orçamento", width="large")
+def manage_quote_dialog_wrapper():
+    if not _quote_repo or not _item_repo or not _supplier_repo:
+        st.error("Repositórios não configurados para o diálogo de orçamento.")
+        if st.button("Fechar"): st.rerun()
+        return
+
+    # Determine parent item ID for context if available/needed
+    # For new quotes, item_id will be selected in the form.
+    # If editing, item_id is part of the quote.
+    # No explicit parent_id_field_name needed for _manage_generic_dialog
+    # as item_id and supplier_id are direct fields in quote_form_config.
+
+    # Example: If you wanted to show info about the item this quote is for (when editing)
+    # editing_quote_id = st.session_state.get(f"editing_quote_id")
+    # if editing_quote_id:
+    #     quote_to_edit = _quote_repo.get(editing_quote_id)
+    #     if quote_to_edit and _item_repo:
+    #         item_for_quote = _item_repo.get(quote_to_edit.item_id)
+    #         if item_for_quote:
+    #             st.info(f"Orçamento para Item: {item_for_quote.code} - {item_for_quote.name}")
+
+    _manage_generic_dialog(
+        entity_type="quote",
+        repo=_quote_repo,
+        form_fields_config=quote_form_config,
+        title_singular="Orçamento",
+        # parent_id_field_name="item_id", # Not needed like this, item_id is a field in the form
+        # parent_id_value=st.session_state.get("selected_item_id") # This would be for creating a quote for a pre-selected item
+    )
