@@ -5,6 +5,7 @@ from typing import Any
 def get_options_map(
     data_list: list[Any],
     name_col: str = "name",
+    code_col: str | None = None, # New parameter
     extra_cols: list[str] | None = None,
     default_message: str = "Selecione...",
 ) -> tuple[dict[Any, str], list[Any]]:
@@ -51,6 +52,11 @@ def get_options_map(
             display_name = str(getattr(row, name_col))
         else:
             display_name = str(row_id)  # Fallback if name_col attribute is missing
+
+        # Prepend code if code_col is provided
+        if code_col and hasattr(row, code_col):
+            code_value = getattr(row, code_col)
+            display_name = f"{code_value} - {display_name}"
 
         options_map[row_id] = display_name
         ids_list.append(row_id)
