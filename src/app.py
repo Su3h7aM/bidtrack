@@ -189,6 +189,7 @@ def show_main_view():
         item_options_map, item_option_ids = get_options_map(
             data_list=items_for_select,
             name_col="name",
+            code_col="code",  # Add this line
             default_message=DEFAULT_ITEM_SELECT_MESSAGE,
         )
 
