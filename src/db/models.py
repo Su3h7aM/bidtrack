@@ -125,7 +125,7 @@ class Item(SQLModel, table=True):
     )
 
     code: str = Field(nullable=False) # New field
-    name: str
+    name: str = Field(nullable=False)
     desc: str | None = Field(default=None)
     unit: str = Field(nullable=False)
     quantity: float
