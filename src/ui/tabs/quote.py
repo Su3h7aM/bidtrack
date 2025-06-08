@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from decimal import Decimal # Keep for column config if needed, though calc is now in service
-from ui.components.entity_manager import display_entity_management_ui
+from ..components.entity_manager import display_entity_management_ui
 from services.dataframes import get_quotes_dataframe # Corrected import
 
 # Type hinting for repositories (optional but good practice)

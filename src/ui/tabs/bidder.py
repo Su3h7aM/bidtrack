@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd # For consistency
-from ui.components.entity_manager import display_entity_management_ui
+from ..components.entity_manager import display_entity_management_ui
 # from db.repositories import BidderRepository # For type hinting
 
 def display_bidders_tab(bidder_repo): # bidder_repo: BidderRepository

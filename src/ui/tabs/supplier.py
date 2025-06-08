@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd # Though not directly used in this config, good for consistency if hooks were added
-from ui.components.entity_manager import display_entity_management_ui
+from ..components.entity_manager import display_entity_management_ui
 # from db.repositories import SupplierRepository # For type hinting if needed
 
 def display_suppliers_tab(supplier_repo): # Add type hint: supplier_repo: SupplierRepository
