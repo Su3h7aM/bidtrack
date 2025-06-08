@@ -1,5 +1,5 @@
-from src.db.database import DATABASE_URL
-from src.db.database import get_metadata
+from db.database import DATABASE_URL
+from db.database import get_metadata
 
 from logging.config import fileConfig
 

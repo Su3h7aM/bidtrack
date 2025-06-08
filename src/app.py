@@ -18,15 +18,15 @@ from services.dataframes import get_quotes_dataframe, get_bids_dataframe
 
 # from state import initialize_session_state # Will be defined in-file
 from services.plotting import create_quotes_figure, create_bids_figure
-from src.ui.utils.utils import get_options_map # Added src. and .utils
-from src.ui.components.dialogs import ( # Added src. and changed to components
+from ui.utils.utils import get_options_map # Added src. and .utils
+from ui.components.dialogs import ( # Added src. and changed to components
     manage_bidding_dialog_wrapper,
     manage_item_dialog_wrapper,
     manage_supplier_dialog_wrapper,
     manage_bidder_dialog_wrapper,
     set_dialog_repositories,
 )
-from src.ui.pages.main_page import show_management_tables_view # Added src. and changed to pages
+from ui.pages.main_page import show_management_tables_view # Added src. and changed to pages
 
 # --- Application Setup (must be first Streamlit command) ---
 APP_TITLE = "📊 Licitações"  # Define APP_TITLE before using it
