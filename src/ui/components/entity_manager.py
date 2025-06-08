@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from decimal import Decimal
-from ui.utils import get_options_map
+from ..utils.utils import get_options_map
 
 # Helper function to load and prepare data for tabs (can be used as a default)
 def load_and_prepare_data(repository, entity_name: str, columns_to_display: list[str] = None, selected_foreign_keys: dict = None):

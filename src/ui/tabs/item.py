@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from decimal import Decimal # For consistency, though not directly used
-from ui.generic_entity_management import display_entity_management_ui
+from ..components.entity_manager import display_entity_management_ui
 # from db.repositories import ItemRepository, BiddingRepository # For type hinting
 
 def display_items_tab(item_repo, bidding_repo): # item_repo: ItemRepository, bidding_repo: BiddingRepository

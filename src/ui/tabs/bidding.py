@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from decimal import Decimal # Not directly used here but often useful with Bidding
 from db.models import BiddingMode # Required for mode handling
-from ui.generic_entity_management import display_entity_management_ui
+from ..components.entity_manager import display_entity_management_ui
 # from db.repositories import BiddingRepository # For type hinting
 
 def prepare_biddings_dataframe_hook(df_raw: pd.DataFrame, selected_fks: dict = None):
