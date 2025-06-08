@@ -6,12 +6,12 @@ import streamlit as st
 # )
 
 # Import the new tab-specific display functions
-from .supplier_tab_content import display_suppliers_tab
-from .bidder_tab_content import display_bidders_tab
-from .bidding_tab_content import display_biddings_tab
-from .item_tab_content import display_items_tab
-from .quote_tab_content import display_quotes_tab
-from .bid_tab_content import display_bids_tab
+from ..tabs.supplier import display_suppliers_tab
+from ..tabs.bidder import display_bidders_tab
+from ..tabs.bidding import display_biddings_tab
+from ..tabs.item import display_items_tab
+from ..tabs.quote import display_quotes_tab
+from ..tabs.bid import display_bids_tab
 
 
 def show_management_tables_view(
