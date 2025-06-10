@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import Any # For dict[str, Any] in update method
+from typing import Any  # For dict[str, Any] in update method
 
 # Python 3.9+ allows built-in types like list for generics, so no 'from typing import list'
+
 
 class Repository[T](ABC):
     @abstractmethod

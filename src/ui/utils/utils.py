@@ -5,7 +5,7 @@ from typing import Any
 def get_options_map(
     data_list: list[Any],
     name_col: str = "name",
-    code_col: str | None = None, # New parameter
+    code_col: str | None = None,  # New parameter
     extra_cols: list[str] | None = None,
     default_message: str = "Selecione...",
 ) -> tuple[dict[Any, str], list[Any]]:
@@ -30,7 +30,7 @@ def get_options_map(
                             try:
                                 display_name_parts.append(str(attribute.value))
                             except AttributeError:
-                                display_name_parts.append(str(attribute)) # Fallback
+                                display_name_parts.append(str(attribute))  # Fallback
                         else:
                             display_name_parts.append(str(attribute))
                     else:  # Add a placeholder if an expected extra_col is missing

@@ -18,15 +18,17 @@ from services.dataframes import get_quotes_dataframe, get_bids_dataframe
 
 # from state import initialize_session_state # Will be defined in-file
 from services.plotting import create_quotes_figure, create_bids_figure
-from ui.utils.utils import get_options_map # Added src. and .utils
-from ui.components.dialogs import ( # Added src. and changed to components
+from ui.utils.utils import get_options_map  # Added src. and .utils
+from ui.components.dialogs import (  # Added src. and changed to components
     manage_bidding_dialog_wrapper,
     manage_item_dialog_wrapper,
     manage_supplier_dialog_wrapper,
     manage_bidder_dialog_wrapper,
     set_dialog_repositories,
 )
-from ui.pages.main_page import show_management_tables_view # Added src. and changed to pages
+from ui.pages.main_page import (
+    show_management_tables_view,
+)  # Added src. and changed to pages
 
 # --- Application Setup (must be first Streamlit command) ---
 APP_TITLE = "📊 Licitações"  # Define APP_TITLE before using it
@@ -263,7 +265,9 @@ def show_main_view():
                     st.markdown(
                         f"**Quantidade:** {current_item_details.quantity} {current_item_details.unit}"
                     )
-                    st.markdown(f"**Observações:** {current_item_details.notes if current_item_details.notes else 'N/A'}")
+                    st.markdown(
+                        f"**Observações:** {current_item_details.notes if current_item_details.notes else 'N/A'}"
+                    )
 
                     st.subheader("Orçamentos e Lances")
                     expander_cols = st.columns(2)
@@ -338,7 +342,10 @@ def show_main_view():
                                 quote_notes = st.text_area(
                                     "Notas do Orçamento", key="quote_notes_input_exp"
                                 )
-                                quote_link = st.text_input("Link do Produto (Opcional)", key="quote_link_input_exp")
+                                quote_link = st.text_input(
+                                    "Link do Produto (Opcional)",
+                                    key="quote_link_input_exp",
+                                )
                                 if st.form_submit_button("💾 Salvar Orçamento"):
                                     if (
                                         selected_supplier_id_quote
@@ -357,8 +364,12 @@ def show_main_view():
                                                 ),
                                                 taxes=Decimal(str(quote_taxes)),
                                                 margin=quote_margin,
-                                                notes=quote_notes if quote_notes else None,
-                                                link=quote_link if quote_link else None, # Added line
+                                                notes=quote_notes
+                                                if quote_notes
+                                                else None,
+                                                link=quote_link
+                                                if quote_link
+                                                else None,  # Added line
                                             )
                                             added_quote = quote_repo.add(
                                                 new_quote_instance
@@ -590,7 +601,11 @@ def show_main_view():
                                 "notes": st.column_config.TextColumn(
                                     "Notas", help="Observações sobre o orçamento."
                                 ),
-                                "link": st.column_config.LinkColumn("Link do Produto", help="Link para a página do produto no site do fornecedor.", validate=r"^https?://[\w\.-]+"),
+                                "link": st.column_config.LinkColumn(
+                                    "Link do Produto",
+                                    help="Link para a página do produto no site do fornecedor.",
+                                    validate=r"^https?://[\w\.-]+",
+                                ),
                             }
                             # Ensure all columns from original_quotes_df are present in config, adding None if missing
                             for col_name in original_quotes_df.columns:
@@ -622,7 +637,8 @@ def show_main_view():
                                     "additional_costs",
                                     "taxes",
                                     "margin",
-                                    "notes", "link"
+                                    "notes",
+                                    "link",
                                 ]
 
                                 if not edited_quotes_df.empty:
@@ -727,10 +743,21 @@ def show_main_view():
                                                     continue
                                             elif col in ["notes", "link"]:
                                                 # Process string fields, handling None and actual strings
-                                                processed_edited_value = str(edited_value) if pd.notna(edited_value) else None
-                                                if original_value != processed_edited_value:
-                                                    update_dict[col] = processed_edited_value
-                                            elif original_value != edited_value: # Fallback for any other column types
+                                                processed_edited_value = (
+                                                    str(edited_value)
+                                                    if pd.notna(edited_value)
+                                                    else None
+                                                )
+                                                if (
+                                                    original_value
+                                                    != processed_edited_value
+                                                ):
+                                                    update_dict[col] = (
+                                                        processed_edited_value
+                                                    )
+                                            elif (
+                                                original_value != edited_value
+                                            ):  # Fallback for any other column types
                                                 update_dict[col] = edited_value
 
                                         if update_dict:

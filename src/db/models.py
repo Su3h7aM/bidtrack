@@ -52,7 +52,7 @@ class Quote(SQLModel, table=True):
 
     margin: float  # This might need re-evaluation or be calculated differently now
     notes: str | None = Field(default=None)
-    link: Optional[str] = Field(default=None, nullable=True) # New field
+    link: Optional[str] = Field(default=None, nullable=True)  # New field
 
 
 class Bid(SQLModel, table=True):
@@ -124,7 +124,7 @@ class Item(SQLModel, table=True):
         sa_column=Column(DateTime, default=datetime.now(), onupdate=datetime.now()),
     )
 
-    code: str = Field(nullable=False) # New field
+    code: str = Field(nullable=False)  # New field
     name: str = Field(nullable=False)
     desc: str | None = Field(default=None)
     unit: str = Field(nullable=False)
